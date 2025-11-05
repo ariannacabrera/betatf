@@ -25,20 +25,25 @@ const TanyFoodsApp = () => {
 
 useEffect(() => {
   (async () => {
+    console.log('ENV URL ->', import.meta.env.VITE_SUPABASE_URL);
+    console.log('ENV KEY present ->', !!import.meta.env.VITE_SUPABASE_ANON_KEY);
+
     const { data, error } = await supabase
       .from('products')
       .select('*')
       .order('description', { ascending: true });
 
     if (error) {
-      console.error('Error loading products:', error.message);
-      alert('Error loading products');
+      console.error('SUPABASE ERROR:', error);
+      alert('Supabase error: ' + (error.message || JSON.stringify(error)));
       return;
     }
 
+    console.log('Products loaded:', data?.length || 0);
     setProducts(data || []);
   })();
 }, []);
+
 
 
   // Save data to localStorage
