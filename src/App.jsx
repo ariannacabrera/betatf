@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
 import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload } from 'lucide-react';
 
 // Admin credentials
@@ -22,15 +23,23 @@ const TanyFoodsApp = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
 
-  // Load data from localStorage on mount
-  useEffect(() => {
-    const loadedUsers = JSON.parse(localStorage.getItem('tany_users') || '{}');
-    const loadedProducts = JSON.parse(localStorage.getItem('tany_products') || '[]');
-    const loadedOrders = JSON.parse(localStorage.getItem('tany_orders') || '[]');
-    setUsers(loadedUsers);
-    setProducts(loadedProducts);
-    setOrders(loadedOrders);
-  }, []);
+useEffect(() => {
+  (async () => {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*')
+      .order('description', { ascending: true });
+
+    if (error) {
+      console.error('Error loading products:', error.message);
+      alert('Error loading products');
+      return;
+    }
+
+    setProducts(data || []);
+  })();
+}, []);
+
 
   // Save data to localStorage
   const saveUsers = (newUsers) => {
