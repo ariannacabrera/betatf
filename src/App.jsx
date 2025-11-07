@@ -164,7 +164,7 @@ useEffect(() => {
         quantity: parseInt(quantity)
       }
     });
-    alert('✅ Added to cart!');
+    showToast('✅ Added to cart!');
   };
 
   const updateCartQuantity = (cartKey, newQuantity) => {
