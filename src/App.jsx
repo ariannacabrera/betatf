@@ -63,7 +63,7 @@ const ADMIN_PASSWORD = "admin123";
 const TEST_MODE = true;
 
 const CUSTOMER_EMAIL = "test@test.com";
-the CUSTOMER_PASSWORD = "tany";
+const CUSTOMER_PASSWORD = "tany";
 
 const CUSTOMER_DEMO_PROFILE = {
   first_name: "Customer",
