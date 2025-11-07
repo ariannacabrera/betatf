@@ -10,6 +10,18 @@ function showToast(message) {
   const el = document.createElement('div');
   el.textContent = message;
 
+// Demo/testing flags & fixed customer login (turn off later)
+const TEST_MODE = true; // <-- set to false when you're done testing
+
+const CUSTOMER_EMAIL = "customer@test.com";
+const CUSTOMER_PASSWORD = "tany";
+
+const CUSTOMER_DEMO_PROFILE = {
+  first_name: "Customer",
+  last_name: "Demo",
+  company_name: "Tany Demo Co",
+};
+
 // simple toast styles (bottom-right)
   Object.assign(el.style, {
     position: 'fixed',
@@ -76,7 +88,6 @@ useEffect(() => {
 }, []);
 
 
-
   // Save data to localStorage
   const saveUsers = (newUsers) => {
     localStorage.setItem('tany_users', JSON.stringify(newUsers));
@@ -119,15 +130,24 @@ useEffect(() => {
     setShowSignup(false);
   };
 
-  const handleLogin = (email, password) => {
-    if (users[email] && users[email].password === password) {
-      setLoggedIn(true);
-      setUserData({ ...users[email], email });
-      setIsAdmin(false);
-    } else {
-      alert('Invalid credentials');
-    }
-  };
+const handleLogin = (email, password) => {
+  // 1) Temporary fixed customer login for demos
+  if (TEST_MODE && email === CUSTOMER_EMAIL && password === CUSTOMER_PASSWORD) {
+    setLoggedIn(true);
+    setUserData({ ...CUSTOMER_DEMO_PROFILE, email });
+    setIsAdmin(false);
+    return;
+  }
+
+  // 2) Normal local user login
+  if (users[email] && users[email].password === password) {
+    setLoggedIn(true);
+    setUserData({ ...users[email], email });
+    setIsAdmin(false);
+  } else {
+    alert('Invalid credentials');
+  }
+};
 
   const handleAdminLogin = (username, password) => {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
