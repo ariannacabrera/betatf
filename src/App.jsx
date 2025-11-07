@@ -696,36 +696,61 @@ useEffect(() => {
     const [activeTab, setActiveTab] = useState('orders');
     const [fileData, setFileData] = useState(null);
 
-    const handleFileUpload = (e) => {
+    const handleFileUpload = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        try {
-          const text = event.target.result;
-          const lines = text.split('\n');
-          const headers = lines[0].split(',').map(h => h.trim());
-          
-          const newProducts = [];
-          for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const values = lines[i].split(',').map(v => v.trim());
-            const product = {};
-            headers.forEach((header, idx) => {
-              product[header] = values[idx] || '';
-            });
-            newProducts.push(product);
-          }
-          
-          saveProducts(newProducts);
-          alert(`✅ Uploaded ${newProducts.length} products successfully!`);
-          setFileData(newProducts);
-        } catch (err) {
-          alert('Error parsing file: ' + err.message);
-        }
-      };
-      reader.readAsText(file);
+    
+      // read file as text
+      const text = await file.text();
+    
+      // simple CSV parse (works if fields don't contain commas/newlines)
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const headers = lines[0].split(',').map(h => h.trim());
+    
+      const newProducts = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = lines[i].split(',').map(v => v.trim());
+        if (!values.length) continue;
+        const row = {};
+        headers.forEach((h, idx) => { row[h] = values[idx] ?? ''; });
+        newProducts.push(row);
+      }
+    
+      // normalize booleans; map image_url -> image_path if needed; trim item_code
+      const toBool = v => ['true','1','yes'].includes(String(v).trim().toLowerCase());
+      newProducts.forEach(p => {
+        if (p.allow_case !== undefined) p.allow_case = toBool(p.allow_case);
+        if (p.allow_each !== undefined) p.allow_each = toBool(p.allow_each);
+        if (p.image_url && !p.image_path) { p.image_path = p.image_url; delete p.image_url; }
+        if (p.item_code) p.item_code = String(p.item_code).trim();
+      });
+    
+      // upsert into Supabase (requires unique constraint on item_code)
+      const { error: upsertErr } = await supabase
+        .from('products')
+        .upsert(newProducts, { onConflict: 'item_code' });
+    
+      if (upsertErr) {
+        console.error(upsertErr);
+        alert('Error saving to Supabase: ' + upsertErr.message);
+        return;
+      }
+    
+      // re-fetch to refresh UI
+      const { data: refreshed, error: refErr } = await supabase
+        .from('products')
+        .select('*')
+        .order('description', { ascending: true });
+    
+      if (refErr) {
+        console.error(refErr);
+        alert('Reload error: ' + refErr.message);
+        return;
+      }
+    
+      setProducts(refreshed || []);
+      showToast(`✅ Uploaded ${newProducts.length} products (upserted).`);
+      setFileData(newProducts);
     };
 
     return (
