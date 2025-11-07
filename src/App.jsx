@@ -6,6 +6,37 @@ import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upl
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
+function showToast(message) {
+  const el = document.createElement('div');
+  el.textContent = message;
+
+// simple toast styles (bottom-right)
+  Object.assign(el.style, {
+    position: 'fixed',
+    right: '20px',
+    bottom: '20px',
+    background: 'rgba(16, 185, 129, 0.95)', // teal-ish
+    color: 'white',
+    padding: '12px 16px',
+    borderRadius: '10px',
+    boxShadow: '0 6px 20px rgba(0,0,0,0.15)',
+    fontSize: '14px',
+    zIndex: 9999,
+    maxWidth: '280px',
+    wordBreak: 'break-word',
+    opacity: '0',
+    transition: 'opacity .25s ease',
+  });
+
+  document.body.appendChild(el);
+  requestAnimationFrame(() => (el.style.opacity = '1'));   // fade-in
+
+  setTimeout(() => {
+    el.style.opacity = '0';                                // fade-out
+    setTimeout(() => el.remove(), 300);
+  }, 2200); // visible ~2.2s
+}
+
 const TanyFoodsApp = () => {
   // State management
   const [users, setUsers] = useState({});
@@ -84,7 +115,7 @@ useEffect(() => {
       [email]: { first_name: firstName, last_name: lastName, company_name: companyName, password }
     };
     saveUsers(newUsers);
-    alert('Account created successfully! Please log in.');
+    showToast('Account created successfully! Please log in.');
     setShowSignup(false);
   };
 
