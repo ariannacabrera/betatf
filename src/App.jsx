@@ -6,10 +6,6 @@ import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upl
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
-function showToast(message) {
-  const el = document.createElement('div');
-  el.textContent = message;
-
 // Demo/testing flags & fixed customer login (turn off later)
 const TEST_MODE = true; // <-- set to false when you're done testing
 
@@ -23,6 +19,9 @@ const CUSTOMER_DEMO_PROFILE = {
 };
 
 // simple toast styles (bottom-right)
+function showToast(message) {
+  const el = document.createElement('div');
+  el.textContent = message;
   Object.assign(el.style, {
     position: 'fixed',
     right: '20px',
