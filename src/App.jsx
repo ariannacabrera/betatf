@@ -1,8 +1,9 @@
-// App.jsx
+// src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import {
-  ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload, Users
+  ShoppingCart, Search, Filter, ChevronLeft, Trash2,
+  Package, LogOut, Upload, History
 } from 'lucide-react';
 
 /* =========================
@@ -27,9 +28,9 @@ function ordersToCSV(orders) {
       rows.push([
         ...base,
         csv(it.item_code),
-        csv(it.description),
+        csv(it.description ?? ''),
         csv(it.brand ?? ''),
-        csv(it.uom),
+        csv(it.uom ?? ''),
         it.quantity ?? ''
       ].join(','));
     });
@@ -71,7 +72,7 @@ function parseCsv(text) {
   });
 }
 
-// Admin creds (simple)
+// Admin creds (simple for now)
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
@@ -111,12 +112,12 @@ function showToast(message) {
 const TanyFoodsApp = () => {
   // State
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);
+  const [orders, setOrders] = useState([]);     // holds recent orders (admin: all, customer: own)
   const [cart, setCart] = useState({});
   const [loggedIn, setLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState({});
-  const [currentPage, setCurrentPage] = useState('catalog');
+  const [currentPage, setCurrentPage] = useState('catalog'); // 'catalog'|'product_detail'|'cart'|'orders_history'
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -140,10 +141,9 @@ const TanyFoodsApp = () => {
     })();
   }, []);
 
-  // Load recent orders (admin = all, customer = own)
+  // === Load recent orders (admin = all, customer = own) ===
   useEffect(() => {
     if (!loggedIn) return;
-
     (async () => {
       const baseSelect = `
         id, order_number, placed_at, customer_name, company_name, email, user_id,
@@ -164,7 +164,6 @@ const TanyFoodsApp = () => {
       }
 
       const { data, error } = await q;
-
       if (error) {
         console.error('Load orders error:', error);
         alert('Failed to load orders: ' + error.message);
@@ -173,6 +172,7 @@ const TanyFoodsApp = () => {
 
       const formatted = (data || []).map(o => ({
         order_id: o.id,
+        order_number: o.order_number,
         timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
         customer_name: o.customer_name,
         company_name: o.company_name,
@@ -210,6 +210,7 @@ const TanyFoodsApp = () => {
       return alert("This email is not authorized.");
     }
 
+    // Success: set session state
     setLoggedIn(true);
     setIsAdmin(Boolean(data.is_admin));
     setUserData({
@@ -279,6 +280,7 @@ const TanyFoodsApp = () => {
     const now = new Date();
     const order_number = `ORD-${now.toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
 
+    // 1) Insert order header
     const { data: orderRow, error: orderErr } = await supabase
       .from('orders')
       .insert([{
@@ -297,6 +299,7 @@ const TanyFoodsApp = () => {
       return alert('Order create failed: ' + orderErr.message);
     }
 
+    // 2) Insert line items
     const items = Object.values(cart).map(it => ({
       order_id: orderRow.id,
       item_code: it.item_code,
@@ -308,12 +311,15 @@ const TanyFoodsApp = () => {
 
     if (itemsErr) {
       console.error(itemsErr);
+      // rollback header so you don't leave an empty order
       await supabase.from('orders').delete().eq('id', orderRow.id);
       return alert('Order items insert failed: ' + itemsErr.message);
     }
 
+    // 3) Update UI and clear cart
     const newOrderForUI = {
       order_id: orderRow.id,
+      order_number: orderRow.order_number,
       timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
       customer_name: orderRow.customer_name,
       company_name: orderRow.company_name,
@@ -325,7 +331,7 @@ const TanyFoodsApp = () => {
     setCart({});
     setShowOrderConfirmation(false);
     alert(`✅ Order ${order_number} submitted!`);
-    setCurrentPage('catalog');
+    setCurrentPage('orders_history'); // jump customer to their Order History after submission
   };
 
   /* ------------- Filters ------------- */
@@ -442,13 +448,21 @@ const TanyFoodsApp = () => {
               <h1 className="text-2xl md:text-3xl font-bold">Tany Foods</h1>
               <p className="text-teal-100 text-sm">Welcome, {userData.first_name || 'Guest'}!</p>
             </div>
-            <button onClick={handleLogout} className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
-              <LogOut size={18} /><span className="hidden sm:inline">Logout</span>
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => setCurrentPage('orders_history')}
+                className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
+                <History size={18} /><span className="hidden sm:inline">Order History</span>
+              </button>
+              <button onClick={handleLogout}
+                className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
+                <LogOut size={18} /><span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
           </div>
+
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-200" size={20} />
               <input
                 type="text"
                 placeholder="Search by item code or description..."
@@ -461,6 +475,7 @@ const TanyFoodsApp = () => {
               <Filter size={18} /><span className="hidden sm:inline">Filter</span>
             </button>
           </div>
+
           {showFilters && (
             <div className="mt-3">
               <select className="w-full px-4 py-2 rounded-lg text-gray-800"
@@ -469,10 +484,17 @@ const TanyFoodsApp = () => {
               </select>
             </div>
           )}
-          <button onClick={() => setCurrentPage('cart')}
-            className="w-full mt-3 bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
-            <ShoppingCart size={20} /> View Cart ({Object.keys(cart).length})
-          </button>
+
+          <div className="grid grid-cols-2 gap-2 mt-3">
+            <button onClick={() => setCurrentPage('cart')}
+              className="bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
+              <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
+            </button>
+            <button onClick={() => setCurrentPage('orders_history')}
+              className="bg-slate-700 text-white py-2 rounded-lg font-medium hover:bg-slate-800 flex items-center justify-center gap-2">
+              <History size={20} /> Order History
+            </button>
+          </div>
         </div>
       </header>
 
@@ -505,15 +527,21 @@ const TanyFoodsApp = () => {
       <div className="min-h-screen bg-gray-50">
         <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
-            <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setCurrentPage('catalog')}
-                className="flex-1 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
                 <ChevronLeft size={20} /> Back to Catalog
               </button>
-              <button onClick={() => setCurrentPage('cart')}
-                className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
-                <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-              </button>
+              <div className="flex gap-2">
+                <button onClick={() => setCurrentPage('cart')}
+                  className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                  <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
+                </button>
+                <button onClick={() => setCurrentPage('orders_history')}
+                  className="flex-1 bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2">
+                  <History size={20} /> History
+                </button>
+              </div>
             </div>
           </div>
         </header>
@@ -550,7 +578,7 @@ const TanyFoodsApp = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
                     <input type="number" min="1" value={quantity}
                       onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus-border-transparent" />
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
                   </div>
 
                   <button onClick={() => { addToCart(selectedProduct, selectedUom, quantity); setCurrentPage('catalog'); }}
@@ -572,10 +600,20 @@ const TanyFoodsApp = () => {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <button onClick={() => setCurrentPage('catalog')}
-            className="w-full bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-            <ChevronLeft size={20} /> Back to Catalog
-          </button>
+          <div className="grid grid-cols-3 gap-2">
+            <button onClick={() => setCurrentPage('catalog')}
+              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+              <ChevronLeft size={20} /> Catalog
+            </button>
+            <button onClick={() => setCurrentPage('orders_history')}
+              className="bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2">
+              <History size={20} /> History
+            </button>
+            <button onClick={handleLogout}
+              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+              <LogOut size={18} /> Logout
+            </button>
+          </div>
         </div>
       </header>
 
@@ -647,6 +685,89 @@ const TanyFoodsApp = () => {
       </main>
     </div>
   );
+
+  /* -------- Customer Order History Page -------- */
+  const CustomerOrdersPage = () => {
+    // orders state already filtered for the logged-in user (when !isAdmin)
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
+          <div className="container mx-auto px-4 py-4">
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setCurrentPage('catalog')}
+                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+                <ChevronLeft size={20} /> Catalog
+              </button>
+              <button onClick={() => setCurrentPage('cart')}
+                className="bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
+              </button>
+              <button onClick={handleLogout}
+                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+                <LogOut size={18} /> Logout
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <main className="container mx-auto px-4 py-6 max-w-4xl">
+          <h1 className="text-3xl font-bold text-gray-800 mb-6">Order History</h1>
+
+          {orders.length === 0 ? (
+            <div className="bg-white rounded-lg shadow p-8 text-center">
+              <Package size={64} className="mx-auto text-gray-300 mb-4" />
+              <p className="text-gray-500">No orders yet. Place your first order from the catalog!</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {orders.map((o) => {
+                const itemCount = (o.items || []).length;
+                return (
+                  <div key={o.order_id} className="bg-white rounded-lg shadow p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <p><span className="text-sm text-gray-600">Order #</span><br/>
+                        <span className="font-semibold text-gray-800">{o.order_number || o.order_id}</span></p>
+                      <p><span className="text-sm text-gray-600">Placed</span><br/>
+                        <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
+                      <p><span className="text-sm text-gray-600">Items</span><br/>
+                        <span className="font-semibold text-gray-800">{itemCount}</span></p>
+                    </div>
+
+                    {itemCount > 0 && (
+                      <div className="mt-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-300">
+                            <tr>
+                              <th className="text-left py-2">Item Code</th>
+                              <th className="text-left py-2">Description</th>
+                              <th className="text-left py-2">Brand</th>
+                              <th className="text-left py-2">UOM</th>
+                              <th className="text-right py-2">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {o.items.map((it, idx) => (
+                              <tr key={idx} className="border-b border-gray-200">
+                                <td className="py-2">{it.item_code}</td>
+                                <td className="py-2">{it.description || '—'}</td>
+                                <td className="py-2">{it.brand || '—'}</td>
+                                <td className="py-2">{it.uom}</td>
+                                <td className="py-2 text-right">{it.quantity}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </main>
+      </div>
+    );
+  };
 
   /* ------------- Admin Dashboard ------------- */
   const AdminDashboard = () => {
@@ -837,269 +958,6 @@ const TanyFoodsApp = () => {
       );
     };
 
-    // -------- Customers Panel (profiles table) --------
-    const CustomersPanel = () => {
-      const [rows, setRows] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [adding, setAdding] = useState(false);
-      const [newUser, setNewUser] = useState({
-        email: '', first_name: '', last_name: '', company_name: '',
-        is_admin: false, is_active: true
-      });
-
-      useEffect(() => {
-        (async () => {
-          setLoading(true);
-          const { data, error } = await supabase
-            .from('profiles')
-            .select('id, email, first_name, last_name, company_name, is_admin, is_active')
-            .order('email', { ascending: true });
-
-          if (error) {
-            console.error(error);
-            alert('Failed to load customers: ' + error.message);
-            setLoading(false);
-            return;
-          }
-          setRows(data || []);
-          setLoading(false);
-        })();
-      }, []);
-
-      const toBool = v => ['true','1','yes','y','on'].includes(String(v).trim().toLowerCase());
-
-      const handleCustomersCsvUpload = async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const text = await file.text();
-        const parsed = parseCsv(text);
-
-        // expected headers: email, first_name, last_name, company_name, is_admin, is_active
-        const payload = parsed
-          .filter(r => r.email && String(r.email).includes('@'))
-          .map(r => ({
-            email: String(r.email).trim().toLowerCase(),
-            first_name: r.first_name?.trim() || null,
-            last_name: r.last_name?.trim() || null,
-            company_name: r.company_name?.trim() || null,
-            is_admin: r.is_admin !== undefined ? toBool(r.is_admin) : false,
-            is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
-          }));
-
-        if (payload.length === 0) return alert('CSV has no valid rows.');
-
-        const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'email' });
-        if (error) {
-          console.error(error);
-          return alert('Upsert failed: ' + error.message);
-        }
-
-        showToast(`✅ Saved ${payload.length} customers`);
-        const { data, error: refErr } = await supabase
-          .from('profiles')
-          .select('id, email, first_name, last_name, company_name, is_admin, is_active')
-          .order('email', { ascending: true });
-        if (!refErr) setRows(data || []);
-      };
-
-      const addCustomer = async () => {
-        if (!newUser.email || !newUser.email.includes('@')) {
-          return alert('Enter a valid email');
-        }
-        setAdding(true);
-        const payload = {
-          email: newUser.email.trim().toLowerCase(),
-          first_name: newUser.first_name || null,
-          last_name: newUser.last_name || null,
-          company_name: newUser.company_name || null,
-          is_admin: !!newUser.is_admin,
-          is_active: !!newUser.is_active
-        };
-        const { data, error } = await supabase.from('profiles').upsert([payload], { onConflict: 'email' }).select('*');
-        setAdding(false);
-        if (error) {
-          console.error(error);
-          return alert('Save failed: ' + error.message);
-        }
-        showToast('✅ Customer saved');
-        setNewUser({ email: '', first_name: '', last_name: '', company_name: '', is_admin: false, is_active: true });
-        setRows(prev => {
-          const m = new Map(prev.map(r => [r.email, r]));
-          data.forEach(d => m.set(d.email, d));
-          return Array.from(m.values()).sort((a,b)=>a.email.localeCompare(b.email));
-        });
-      };
-
-      const updateField = (id, key, value) => {
-        setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
-      };
-
-      const saveRow = async (row) => {
-        const payload = {
-          id: row.id,
-          email: row.email?.trim().toLowerCase(),
-          first_name: row.first_name || null,
-          last_name: row.last_name || null,
-          company_name: row.company_name || null,
-          is_admin: !!row.is_admin,
-          is_active: !!row.is_active
-        };
-        const { error } = await supabase.from('profiles').update(payload).eq('id', row.id);
-        if (error) {
-          console.error(error);
-          alert('Update failed: ' + error.message);
-        } else {
-          showToast('✅ Saved');
-        }
-      };
-
-      const deleteRow = async (id) => {
-        if (!confirm('Delete this customer?')) return;
-        const { error } = await supabase.from('profiles').delete().eq('id', id);
-        if (error) {
-          console.error(error);
-          return alert('Delete failed: ' + error.message);
-        }
-        setRows(prev => prev.filter(r => r.id !== id));
-        showToast('🗑️ Deleted');
-      };
-
-      return (
-        <div className="space-y-6">
-          {/* Upload CSV */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">Upload Authorized Customers (CSV)</h3>
-            <p className="text-sm text-gray-600 mb-4">
-              Required headers: <code>email, first_name, last_name, company_name, is_admin, is_active</code>
-            </p>
-            <label className="inline-flex items-center justify-center gap-2 bg-teal-600 text-white py-2 px-4 rounded-lg cursor-pointer hover:bg-teal-700">
-              <Upload size={18} />
-              <span>Choose CSV File</span>
-              <input type="file" accept=".csv" onChange={handleCustomersCsvUpload} className="hidden" />
-            </label>
-          </div>
-
-          {/* Add single customer */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Add Customer</h3>
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-              <input className="border rounded px-3 py-2" placeholder="Email *" value={newUser.email}
-                    onChange={e=>setNewUser({...newUser, email: e.target.value})}/>
-              <input className="border rounded px-3 py-2" placeholder="First name" value={newUser.first_name}
-                    onChange={e=>setNewUser({...newUser, first_name: e.target.value})}/>
-              <input className="border rounded px-3 py-2" placeholder="Last name" value={newUser.last_name}
-                    onChange={e=>setNewUser({...newUser, last_name: e.target.value})}/>
-              <input className="border rounded px-3 py-2" placeholder="Company" value={newUser.company_name}
-                    onChange={e=>setNewUser({...newUser, company_name: e.target.value})}/>
-              <div className="flex items-center gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={newUser.is_admin}
-                        onChange={e=>setNewUser({...newUser, is_admin: e.target.checked})}/>
-                  Admin
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input type="checkbox" checked={newUser.is_active}
-                        onChange={e=>setNewUser({...newUser, is_active: e.target.checked})}/>
-                  Active
-                </label>
-              </div>
-            </div>
-            <button
-              onClick={addCustomer}
-              disabled={adding}
-              className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
-              {adding ? 'Saving…' : 'Add / Update'}
-            </button>
-          </div>
-
-          {/* Table */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Authorized Customers</h3>
-
-            {loading ? (
-              <p className="text-gray-500">Loading…</p>
-            ) : rows.length === 0 ? (
-              <p className="text-gray-500">No customers yet.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-teal-600 text-white">
-                    <tr>
-                      <th className="px-3 py-2 text-left">Email</th>
-                      <th className="px-3 py-2 text-left">First</th>
-                      <th className="px-3 py-2 text-left">Last</th>
-                      <th className="px-3 py-2 text-left">Company</th>
-                      <th className="px-3 py-2 text-center">Admin</th>
-                      <th className="px-3 py-2 text-center">Active</th>
-                      <th className="px-3 py-2"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-200">
-                    {rows.map(r => (
-                      <tr key={r.id}>
-                        <td className="px-3 py-2">
-                          <input
-                            className="border rounded px-2 py-1 w-full"
-                            value={r.email || ''}
-                            onChange={e=>updateField(r.id, 'email', e.target.value)}
-                            onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input className="border rounded px-2 py-1 w-full"
-                                value={r.first_name || ''}
-                                onChange={e=>updateField(r.id, 'first_name', e.target.value)}
-                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input className="border rounded px-2 py-1 w-full"
-                                value={r.last_name || ''}
-                                onChange={e=>updateField(r.id, 'last_name', e.target.value)}
-                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
-                          />
-                        </td>
-                        <td className="px-3 py-2">
-                          <input className="border rounded px-2 py-1 w-full"
-                                value={r.company_name || ''}
-                                onChange={e=>updateField(r.id, 'company_name', e.target.value)}
-                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <input type="checkbox"
-                                checked={!!r.is_admin}
-                                onChange={e=>{
-                                  updateField(r.id, 'is_admin', e.target.checked);
-                                  saveRow({ ...r, is_admin: e.target.checked });
-                                }}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-center">
-                          <input type="checkbox"
-                                checked={!!r.is_active}
-                                onChange={e=>{
-                                  updateField(r.id, 'is_active', e.target.checked);
-                                  saveRow({ ...r, is_active: e.target.checked });
-                                }}
-                          />
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          <button onClick={()=>deleteRow(r.id)} className="text-red-600 hover:text-red-800">
-                            <Trash2 size={18} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
-      );
-    };
-
     // Admin render
     return (
       <div className="min-h-screen bg-gray-50">
@@ -1115,32 +973,26 @@ const TanyFoodsApp = () => {
         </header>
 
         <div className="container mx-auto px-4 py-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-6">
+          <div className="flex gap-2 mb-6">
             <button
               onClick={() => setActiveTab('orders')}
-              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
                 activeTab === 'orders' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
               }`}>
               <Package size={20} /> Orders
             </button>
             <button
               onClick={() => setActiveTab('products')}
-              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+              className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
                 activeTab === 'products' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
               }`}>
               <Upload size={20} /> Products
             </button>
-            <button
-              onClick={() => setActiveTab('customers')}
-              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
-                activeTab === 'customers' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
-              }`}>
-              <Users size={20} /> Customers
-            </button>
           </div>
 
-          {activeTab === 'orders' && <OrdersPanel orders={orders} />}
-          {activeTab === 'products' && (
+          {activeTab === 'orders' ? (
+            <OrdersPanel orders={orders} />
+          ) : (
             <>
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Database Management</h2>
 
@@ -1192,7 +1044,6 @@ const TanyFoodsApp = () => {
               )}
             </>
           )}
-          {activeTab === 'customers' && <CustomersPanel />}
         </div>
       </div>
     );
@@ -1204,6 +1055,7 @@ const TanyFoodsApp = () => {
   if (currentPage === 'catalog') return <CatalogPage />;
   if (currentPage === 'product_detail') return <ProductDetailPage />;
   if (currentPage === 'cart') return <CartPage />;
+  if (currentPage === 'orders_history') return <CustomerOrdersPage />;
   return <CatalogPage />;
 };
 
