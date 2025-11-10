@@ -102,6 +102,13 @@ function showToast(message) {
   }, 2200);
 }
 
+function displayOrderId(o) {
+  // Prefer your human-friendly order_number set at submit time.
+  if (o.order_number) return o.order_number;
+  // Fallback: short, readable slice of the UUID
+  return `#${String(o.order_id).slice(0, 8).toUpperCase()}`;
+}
+
 /* =========================
    App
    ========================= */
@@ -177,6 +184,7 @@ const TanyFoodsApp = () => {
 
       const formatted = (data || []).map(o => ({
         order_id: o.id,
+        order_number: o.order_number || null,
         timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
         customer_name: o.customer_name,
         company_name: o.company_name,
@@ -185,6 +193,7 @@ const TanyFoodsApp = () => {
           item_code: it.item_code,
           uom: it.uom,
           quantity: it.quantity,
+          // join-provided fields; may be empty if the product row doesn't exist
           description: it.products?.description || '',
           brand: it.products?.brand || ''
         }))
