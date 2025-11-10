@@ -375,7 +375,6 @@ const LoginPage = () => {
               Continue
             </button>
             <p className="text-xs text-gray-500 text-center">
-              No password needed — email must be pre-authorized by Tany Foods.
             </p>
           </div>
         ) : (
