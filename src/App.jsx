@@ -53,6 +53,10 @@ function downloadTextFile(filename, text) {
   URL.revokeObjectURL(url);
 }
 
+// Admin creds (keep simple for now)
+const ADMIN_USERNAME = "admin";
+const ADMIN_PASSWORD = "admin123";
+
 /* =========================
    Tiny toast helper
    ========================= */
@@ -96,7 +100,6 @@ const TanyFoodsApp = () => {
   const [userData, setUserData] = useState({});
   const [currentPage, setCurrentPage] = useState('catalog');
   const [selectedProduct, setSelectedProduct] = useState(null);
-  const [showSignup, setShowSignup] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
@@ -119,7 +122,92 @@ const TanyFoodsApp = () => {
     })();
   }, []);
 
+// === Load recent orders (admin = all, customer = own) ===
+useEffect(() => {
+  if (!loggedIn) return;
+
+  (async () => {
+    // Build the base select with a join to products via the FK on order_items.item_code
+    const baseSelect = `
+      id, order_number, placed_at, customer_name, company_name, email, user_id,
+      order_items (
+        item_code, uom, quantity,
+        products:products!order_items_item_code_fkey (description, brand)
+      )
+    `;
+
+    let q = supabase
+      .from('orders')
+      .select(baseSelect)
+      .order('placed_at', { ascending: false })
+      .limit(50);
+
+    // If not admin, restrict to the logged-in user's orders (RLS will also enforce this)
+    if (!isAdmin && userData?.id) {
+      q = q.eq('user_id', userData.id);
+    }
+
+    const { data, error } = await q;
+
+    if (error) {
+      console.error('Load orders error:', error);
+      alert('Failed to load orders: ' + error.message);
+      return;
+    }
+
+    // reshape to OrdersPanel format
+    const formatted = (data || []).map(o => ({
+      order_id: o.id,
+      timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
+      customer_name: o.customer_name,
+      company_name: o.company_name,
+      email: o.email,
+      items: (o.order_items || []).map(it => ({
+        item_code: it.item_code,
+        uom: it.uom,
+        quantity: it.quantity,
+        description: it.products?.description || '',
+        brand: it.products?.brand || ''
+      }))
+    }));
+
+    setOrders(formatted);
+  })();
+}, [loggedIn, isAdmin, userData?.id]);
+
+
   /* ------------- Auth ------------- */
+ // ADD: email-only customer login against profiles
+const tryCustomerLogin = async (rawEmail) => {
+  const e = (rawEmail || "").trim().toLowerCase();
+  if (!e) return alert("Enter your email");
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, first_name, last_name, company_name, is_admin, is_active")
+    .eq("email", e)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Supabase error:", error);
+    return alert("Error checking access: " + (error.message || "unknown"));
+  }
+  if (!data || data.is_active === false) {
+    return alert("This email is not authorized.");
+  }
+
+  // Success: set session state
+  setLoggedIn(true);
+  setIsAdmin(Boolean(data.is_admin)); // uses your existing is_admin boolean
+  setUserData({
+    id: data.id,                       // keep this — useful for orders FK later
+    email: data.email,
+    first_name: data.first_name || "",
+    last_name: data.last_name || "",
+    company_name: data.company_name || ""
+  });
+};
+
   const handleAdminLogin = (username, password) => {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       setLoggedIn(true);
@@ -171,24 +259,65 @@ const TanyFoodsApp = () => {
     setCart(next);
   };
 
-  const submitOrder = () => {
-    const now = new Date();
-    const timestamp = now.toLocaleString('en-US', { timeZone: 'America/Chicago' });
-    const orderId = `ORD-${now.toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
-    const order = {
-      order_id: orderId,
-      timestamp,
-      customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim(),
-      company_name: userData.company_name,
-      email: userData.email,
-      items: Object.values(cart)
-    };
-    saveOrders([...orders, order]);
-    setCart({});
-    setShowOrderConfirmation(false);
-    alert(`✅ Order ${orderId} submitted successfully!`);
-    setCurrentPage('catalog');
+const submitOrder = async () => {
+  if (!userData?.id) return alert('Not logged in.');
+  if (Object.keys(cart).length === 0) return alert('Your cart is empty.');
+
+  const now = new Date();
+  const order_number = `ORD-${now.toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+
+  // 1) Insert order header
+  const { data: orderRow, error: orderErr } = await supabase
+    .from('orders')
+    .insert([{
+      order_number,
+      user_id: userData.id, // <-- profiles.id (UUID)
+      placed_at: now.toISOString(),
+      customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || null,
+      company_name: userData.company_name || null,
+      email: userData.email || null
+    }])
+    .select('id, order_number, placed_at, customer_name, company_name, email')
+    .single();
+
+  if (orderErr) {
+    console.error(orderErr);
+    return alert('Order create failed: ' + orderErr.message);
+  }
+
+  // 2) Insert line items (FK to products.item_code, uom must be 'Case' or 'Each')
+  const items = Object.values(cart).map(it => ({
+    order_id: orderRow.id,
+    item_code: it.item_code,
+    uom: it.uom,
+    quantity: Number(it.quantity) || 1
+  }));
+
+  const { error: itemsErr } = await supabase.from('order_items').insert(items);
+
+  if (itemsErr) {
+    console.error(itemsErr);
+    // rollback header so you don't leave an empty order
+    await supabase.from('orders').delete().eq('id', orderRow.id);
+    return alert('Order items insert failed: ' + itemsErr.message);
+  }
+
+  // 3) Update UI and clear cart
+  const newOrderForUI = {
+    order_id: orderRow.id,
+    timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
+    customer_name: orderRow.customer_name,
+    company_name: orderRow.company_name,
+    email: orderRow.email,
+    items
   };
+
+  setOrders(prev => [newOrderForUI, ...prev]);
+  setCart({});
+  setShowOrderConfirmation(false);
+  alert(`✅ Order ${order_number} submitted!`);
+  setCurrentPage('catalog');
+};
 
   /* ------------- Filters ------------- */
   const filteredProducts = products.filter(p => {
@@ -202,93 +331,80 @@ const TanyFoodsApp = () => {
   const categories = ['All', ...new Set(products.map(p => p.category || 'Uncategorized'))];
 
   /* ------------- Pages ------------- */
-  const SignupPage = () => {
-    const [formData, setFormData] = useState({
-      firstName: '', lastName: '', companyName: '', email: '', password: '', confirmPassword: ''
-    });
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
-            <p className="text-gray-600 text-sm">Products you long for™</p>
-            <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Create Your Account</h2>
-          <div className="space-y-4">
-            <input type="text" placeholder="First Name*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.firstName} onChange={(e) => setFormData({...formData, firstName: e.target.value})}/>
-            <input type="text" placeholder="Last Name*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.lastName} onChange={(e) => setFormData({...formData, lastName: e.target.value})}/>
-            <input type="text" placeholder="Company Name*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.companyName} onChange={(e) => setFormData({...formData, companyName: e.target.value})}/>
-            <input type="email" placeholder="Email*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})}/>
-            <input type="password" placeholder="Password*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})}/>
-            <input type="password" placeholder="Confirm Password*" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={formData.confirmPassword} onChange={(e) => setFormData({...formData, confirmPassword: e.target.value})}/>
-            <button onClick={() => handleSignup(formData)} className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">Sign Up</button>
-            <button onClick={() => setShowSignup(false)} className="w-full text-teal-600 py-2 text-sm hover:underline">Already have an account? Log In</button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+const LoginPage = () => {
+  const [activeTab, setActiveTab] = useState('customer');
+  const [email, setEmail] = useState('');
+  const [adminUser, setAdminUser] = useState('');
+  const [adminPass, setAdminPass] = useState('');
 
-  const LoginPage = () => {
-    const [activeTab, setActiveTab] = useState('customer');
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
-    const [adminUser, setAdminUser] = useState('');
-    const [adminPass, setAdminPass] = useState('');
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
-            <p className="text-gray-600 text-sm">Products you long for™</p>
-            <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
-          </div>
-          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Welcome Back!</h2>
-          <div className="flex border-b border-gray-200 mb-6">
-            <button onClick={() => setActiveTab('customer')}
-              className={`flex-1 py-3 font-medium ${activeTab === 'customer' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
-              Customer Login
-            </button>
-            <button onClick={() => setActiveTab('admin')}
-              className={`flex-1 py-3 font-medium ${activeTab === 'admin' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
-              Admin Login
-            </button>
-          </div>
-          {activeTab === 'customer' ? (
-            <div className="space-y-4">
-              <input type="email" placeholder="Email" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                value={email} onChange={(e) => setEmail(e.target.value)}/>
-              <input type="password" placeholder="Password" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                value={password} onChange={(e) => setPassword(e.target.value)}/>
-              <button onClick={() => handleLogin(email, password)} className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
-                Log In
-              </button>
-              <button onClick={() => setShowSignup(true)} className="w-full text-teal-600 py-2 text-sm hover:underline">
-                Don't have an account? Sign Up
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <input type="text" placeholder="Admin Username" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                value={adminUser} onChange={(e) => setAdminUser(e.target.value)}/>
-              <input type="password" placeholder="Admin Password" className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                value={adminPass} onChange={(e) => setAdminPass(e.target.value)}/>
-              <button onClick={() => handleAdminLogin(adminUser, adminPass)} className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
-                Admin Log In
-              </button>
-            </div>
-          )}
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+        <div className="text-center mb-8">
+          <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
+          <p className="text-gray-600 text-sm">Products you long for™</p>
+          <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
         </div>
+        <h2 className="text-2xl font-semibold text-gray-800 mb-6">Welcome Back!</h2>
+
+        <div className="flex border-b border-gray-200 mb-6">
+          <button
+            onClick={() => setActiveTab('customer')}
+            className={`flex-1 py-3 font-medium ${activeTab === 'customer' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
+            Customer Login
+          </button>
+          <button
+            onClick={() => setActiveTab('admin')}
+            className={`flex-1 py-3 font-medium ${activeTab === 'admin' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
+            Admin Login
+          </button>
+        </div>
+
+        {activeTab === 'customer' ? (
+          <div className="space-y-4">
+            <input
+              type="email"
+              placeholder="Authorized email"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <button
+              onClick={() => tryCustomerLogin(email)}
+              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
+              Continue
+            </button>
+            <p className="text-xs text-gray-500 text-center">
+              No password needed — email must be pre-authorized by Tany Foods.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            <input
+              type="text"
+              placeholder="Admin Username"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              value={adminUser}
+              onChange={(e) => setAdminUser(e.target.value)}
+            />
+            <input
+              type="password"
+              placeholder="Admin Password"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+              value={adminPass}
+              onChange={(e) => setAdminPass(e.target.value)}
+            />
+            <button
+              onClick={() => handleAdminLogin(adminUser, adminPass)}
+              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
+              Admin Log In
+            </button>
+          </div>
+        )}
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   const ProductCard = ({ product }) => {
     const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/600x400';
@@ -806,7 +922,7 @@ const TanyFoodsApp = () => {
   };
 
   /* ------------- Main Render ------------- */
-  if (!loggedIn) return showSignup ? <SignupPage /> : <LoginPage />;
+  if (!loggedIn) return <LoginPage />;
   if (isAdmin) return <AdminDashboard />;
   if (currentPage === 'catalog') return <CatalogPage />;
   if (currentPage === 'product_detail') return <ProductDetailPage />;
