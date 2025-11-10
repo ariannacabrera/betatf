@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from './lib/supabase';
 import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload, History } from 'lucide-react';
 
@@ -24,9 +24,9 @@ function ordersToCSV(orders) {
       rows.push([
         ...base,
         csv(it.item_code),
-        csv(it.description ?? ''),
+        csv(it.description),
         csv(it.brand ?? ''),
-        csv(it.uom ?? ''),
+        csv(it.uom),
         it.quantity ?? ''
       ].join(','));
     });
@@ -113,12 +113,18 @@ const TanyFoodsApp = () => {
   const [loggedIn, setLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState({});
-  const [currentPage, setCurrentPage] = useState('catalog'); // 'catalog' | 'product_detail' | 'cart' | 'order_history'
+  const [currentPage, setCurrentPage] = useState('catalog');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
+
+  // Fast lookup for product details (used to enrich optimistic order items)
+  const productByCode = useMemo(
+    () => new Map((products || []).map(p => [p.item_code, p])),
+    [products]
+  );
 
   // Load products from Supabase
   useEffect(() => {
@@ -142,7 +148,7 @@ const TanyFoodsApp = () => {
     if (!loggedIn) return;
 
     (async () => {
-      // Build the base select with join to products via the FK on order_items.item_code
+      // Join to products for description/brand via FK
       const baseSelect = `
         id, order_number, placed_at, customer_name, company_name, email, user_id,
         order_items (
@@ -157,7 +163,6 @@ const TanyFoodsApp = () => {
         .order('placed_at', { ascending: false })
         .limit(50);
 
-      // If not admin, restrict to the logged-in user's orders (RLS will also enforce this)
       if (!isAdmin && userData?.id) {
         q = q.eq('user_id', userData.id);
       }
@@ -170,10 +175,8 @@ const TanyFoodsApp = () => {
         return;
       }
 
-      // reshape to UI format
       const formatted = (data || []).map(o => ({
         order_id: o.id,
-        order_number: o.order_number,
         timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
         customer_name: o.customer_name,
         company_name: o.company_name,
@@ -192,7 +195,7 @@ const TanyFoodsApp = () => {
   }, [loggedIn, isAdmin, userData?.id]);
 
   /* ------------- Auth ------------- */
-  // Email-only customer login against profiles
+  // email-only customer login against profiles
   const tryCustomerLogin = async (rawEmail) => {
     const e = (rawEmail || "").trim().toLowerCase();
     if (!e) return alert("Enter your email");
@@ -211,7 +214,6 @@ const TanyFoodsApp = () => {
       return alert("This email is not authorized.");
     }
 
-    // Success: set session state
     setLoggedIn(true);
     setIsAdmin(Boolean(data.is_admin));
     setUserData({
@@ -243,7 +245,6 @@ const TanyFoodsApp = () => {
 
   /* ------------- Cart ------------- */
   const addToCart = (product, uom, quantity) => {
-    const q = Math.max(1, parseInt(quantity, 10) || 1);
     const cartKey = product.item_code;
     if (cart[cartKey]) {
       alert('This item is already in your cart. Edit the quantity in the cart.');
@@ -256,20 +257,17 @@ const TanyFoodsApp = () => {
         description: product.description,
         brand: product.brand || '',
         uom,
-        quantity: q
+        quantity: parseInt(quantity)
       }
     });
     showToast('✅ Added to cart!');
   };
 
-  const updateCartQuantity = (cartKey, newValue) => {
-    // Let the user type freely but enforce positive integers
-    const v = String(newValue ?? '').replace(/[^\d]/g, '');
-    const n = v === '' ? 1 : Math.max(1, parseInt(v, 10) || 1);
-    setCart({
-      ...cart,
-      [cartKey]: { ...cart[cartKey], quantity: n }
-    });
+  const updateCartQuantity = (cartKey, newQuantity) => {
+    setCart(prev => ({
+      ...prev,
+      [cartKey]: { ...prev[cartKey], quantity: Math.max(1, parseInt(newQuantity, 10) || 1) }
+    }));
   };
 
   const removeFromCart = (cartKey) => {
@@ -290,7 +288,7 @@ const TanyFoodsApp = () => {
       .from('orders')
       .insert([{
         order_number,
-        user_id: userData.id, // profiles.id (UUID)
+        user_id: userData.id,
         placed_at: now.toISOString(),
         customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || null,
         company_name: userData.company_name || null,
@@ -316,27 +314,35 @@ const TanyFoodsApp = () => {
 
     if (itemsErr) {
       console.error(itemsErr);
-      // rollback header so you don't leave an empty order
       await supabase.from('orders').delete().eq('id', orderRow.id);
       return alert('Order items insert failed: ' + itemsErr.message);
     }
 
     // 3) Update UI and clear cart
+    // ENRICH: pull description/brand for the optimistic UI row so it matches DB-loaded rows
+    const enrichedItems = items.map(it => {
+      const p = productByCode.get(it.item_code);
+      return {
+        ...it,
+        description: p?.description || '',
+        brand: p?.brand || ''
+      };
+    });
+
     const newOrderForUI = {
       order_id: orderRow.id,
-      order_number: orderRow.order_number,
       timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
       customer_name: orderRow.customer_name,
       company_name: orderRow.company_name,
       email: orderRow.email,
-      items
+      items: enrichedItems
     };
 
     setOrders(prev => [newOrderForUI, ...prev]);
     setCart({});
     setShowOrderConfirmation(false);
     alert(`✅ Order ${order_number} submitted!`);
-    setCurrentPage('order_history');
+    setCurrentPage('catalog');
   };
 
   /* ------------- Filters ------------- */
@@ -457,10 +463,9 @@ const TanyFoodsApp = () => {
               <LogOut size={18} /><span className="hidden sm:inline">Logout</span>
             </button>
           </div>
-
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-200" size={20} />
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
                 placeholder="Search by item code or description..."
@@ -473,7 +478,6 @@ const TanyFoodsApp = () => {
               <Filter size={18} /><span className="hidden sm:inline">Filter</span>
             </button>
           </div>
-
           {showFilters && (
             <div className="mt-3">
               <select className="w-full px-4 py-2 rounded-lg text-gray-800"
@@ -482,15 +486,14 @@ const TanyFoodsApp = () => {
               </select>
             </div>
           )}
-
           <div className="grid grid-cols-2 gap-2 mt-3">
             <button onClick={() => setCurrentPage('cart')}
               className="bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
-              <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
+              <ShoppingCart size={20} /> View Cart ({Object.keys(cart).length})
             </button>
             <button onClick={() => setCurrentPage('order_history')}
               className="bg-white text-teal-700 py-2 rounded-lg font-medium hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
-              <History size={20} /> Order History
+              <History size={18} /> Order History
             </button>
           </div>
         </div>
@@ -513,24 +516,13 @@ const TanyFoodsApp = () => {
 
   const ProductDetailPage = () => {
     const [selectedUom, setSelectedUom] = useState('Case');
-    const [quantity, setQuantity] = useState('1'); // string so users can type naturally
+    const [quantity, setQuantity] = useState(1);
     if (!selectedProduct) return null;
 
     const imgSrc = selectedProduct.image_url || selectedProduct.image_path || 'https://via.placeholder.com/600x400';
     const uomOptions = [];
     if (selectedProduct.allow_case) uomOptions.push('Case');
     if (selectedProduct.allow_each) uomOptions.push('Each');
-
-    // On change: allow only digits; do not force until submit/blur
-    const handleQtyChange = (e) => {
-      const raw = e.target.value;
-      const onlyDigits = raw.replace(/[^\d]/g, '');
-      setQuantity(onlyDigits === '' ? '' : onlyDigits);
-    };
-    const handleQtyBlur = () => {
-      const n = Math.max(1, parseInt(quantity, 10) || 1);
-      setQuantity(String(n));
-    };
 
     return (
       <div className="min-h-screen bg-gray-50">
@@ -577,22 +569,56 @@ const TanyFoodsApp = () => {
                     </div>
                   </div>
 
+                  {/* --- Quantity picker with + / - and safe typing --- */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="\d*"
-                      value={quantity}
-                      onChange={handleQtyChange}
-                      onBlur={handleQtyBlur}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-                      placeholder="1"
-                    />
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(q => Math.max(1, Number(q) - 1))}
+                        className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                        aria-label="Decrease quantity"
+                      >
+                        −
+                      </button>
+
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={String(quantity)}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          if (v === '') return setQuantity('');
+                          if (/^\d+$/.test(v)) {
+                            const n = parseInt(v, 10);
+                            setQuantity(Number.isFinite(n) ? Math.max(1, n) : 1);
+                          }
+                        }}
+                        onBlur={() => {
+                          const n = parseInt(quantity, 10);
+                          if (!Number.isFinite(n) || n < 1) setQuantity(1);
+                        }}
+                        className="w-20 text-center px-2 py-2 border border-gray-300 rounded"
+                      />
+
+                      <button
+                        type="button"
+                        onClick={() => setQuantity(q => Math.max(1, Number(q) + 1))}
+                        className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                        aria-label="Increase quantity"
+                      >
+                        +
+                      </button>
+                    </div>
                   </div>
 
-                  <button
-                    onClick={() => { addToCart(selectedProduct, selectedUom, quantity === '' ? 1 : quantity); setCurrentPage('catalog'); }}
+                  <button onClick={() => { 
+                      const n = parseInt(quantity, 10);
+                      const safeQty = Number.isFinite(n) && n > 0 ? n : 1;
+                      addToCart(selectedProduct, selectedUom, safeQty); 
+                      setCurrentPage('catalog'); 
+                    }}
                     className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2">
                     <ShoppingCart size={20} /> Add to Cart
                   </button>
@@ -657,18 +683,21 @@ const TanyFoodsApp = () => {
                           <input
                             type="text"
                             inputMode="numeric"
-                            pattern="\d*"
+                            pattern="[0-9]*"
                             value={String(item.quantity)}
                             onChange={(e) => {
-                              const raw = e.target.value;
-                              const onlyDigits = raw.replace(/[^\d]/g, '');
-                              updateCartQuantity(key, onlyDigits === '' ? '1' : onlyDigits);
+                              const v = e.target.value;
+                              if (v === '') return updateCartQuantity(key, 1);
+                              if (/^\d+$/.test(v)) {
+                                const n = parseInt(v, 10);
+                                updateCartQuantity(key, Math.max(1, n));
+                              }
                             }}
                             onBlur={(e) => {
-                              const n = Math.max(1, parseInt(e.target.value,10) || 1);
-                              updateCartQuantity(key, String(n));
+                              const n = parseInt(e.target.value, 10);
+                              updateCartQuantity(key, (!Number.isFinite(n) || n < 1) ? 1 : n);
                             }}
-                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
                           />
                         </td>
                         <td className="px-4 py-3">
@@ -706,111 +735,83 @@ const TanyFoodsApp = () => {
     </div>
   );
 
-  /* -------- Order History (Customer) -------- */
-  const OrderHistoryPage = () => {
-    // Reuse `orders` already fetched for the logged-in user (non-admin)
-    const [expanded, setExpanded] = useState(() => new Set());
-
-    const toggleExpand = (id) => {
-      const next = new Set(expanded);
-      next.has(id) ? next.delete(id) : next.add(id);
-      setExpanded(next);
-    };
-
-    return (
-      <div className="min-h-screen bg-gray-50">
-        <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
-          <div className="container mx-auto px-4 py-4">
-            <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => setCurrentPage('catalog')}
-                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-                <ChevronLeft size={20} /> Back to Catalog
-              </button>
-              <button onClick={() => setCurrentPage('cart')}
-                className="bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
-                <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-              </button>
-            </div>
+  // -------- Customers' Order History (non-admin) --------
+  const OrderHistoryPage = () => (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCurrentPage('catalog')}
+              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+              <ChevronLeft size={20} /> Back to Catalog
+            </button>
+            <button onClick={() => setCurrentPage('cart')}
+              className="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+              <ShoppingCart size={18} /> Cart ({Object.keys(cart).length})
+            </button>
           </div>
-        </header>
+        </div>
+      </header>
 
-        <main className="container mx-auto px-4 py-6 max-w-4xl">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Your Orders</h1>
+      <main className="container mx-auto px-4 py-6 max-w-4xl">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Order History</h1>
 
-          {orders.length === 0 ? (
-            <div className="bg-white rounded-lg shadow p-8 text-center">
-              <Package size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">No orders yet. Place your first order from the catalog.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {orders.map(o => {
-                const id = o.order_id;
-                const itemCount = (o.items || []).length;
-                const isOpen = expanded.has(id);
-                return (
-                  <div key={id} className="bg-white rounded-lg shadow-lg p-6">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          <p><span className="text-sm text-gray-600">Order #</span><br/>
-                            <span className="font-semibold text-gray-800">{o.order_number || id}</span></p>
-                          <p><span className="text-sm text-gray-600">Placed</span><br/>
-                            <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
-                          {o.company_name && (
-                            <p><span className="text-sm text-gray-600">Company</span><br/>
-                              <span className="font-semibold text-gray-800">{o.company_name}</span></p>
-                          )}
-                          {o.email && (
-                            <p><span className="text-sm text-gray-600">Email</span><br/>
-                              <span className="font-semibold text-gray-800">{o.email}</span></p>
-                          )}
-                          <p><span className="text-sm text-gray-600">Total Items</span><br/>
-                            <span className="font-semibold text-gray-800">{itemCount}</span></p>
-                        </div>
-                      </div>
-                      <button onClick={() => toggleExpand(id)} className="text-sm px-3 py-2 rounded bg-gray-100 hover:bg-gray-200">
-                        {isOpen ? 'Hide items' : `Show items (${itemCount})`}
-                      </button>
-                    </div>
-
-                    {isOpen && (
-                      <div className="mt-4">
-                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead className="border-b border-gray-300">
-                              <tr>
-                                <th className="text-left py-2">Item Code</th>
-                                <th className="text-left py-2">Description</th>
-                                <th className="text-left py-2">Brand</th>
-                                <th className="text-left py-2">UOM</th>
-                                <th className="text-right py-2">Qty</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {(o.items || []).map((it, idx) => (
-                                <tr key={idx} className="border-b border-gray-200">
-                                  <td className="py-2">{it.item_code}</td>
-                                  <td className="py-2">{it.description}</td>
-                                  <td className="py-2">{it.brand || '—'}</td>
-                                  <td className="py-2">{it.uom}</td>
-                                  <td className="py-2 text-right">{it.quantity}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    )}
+        {orders.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <Package size={64} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500">No past orders yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map((o) => {
+              const itemCount = (o.items || []).length;
+              return (
+                <div key={o.order_id} className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <p><span className="text-sm text-gray-600">Order ID</span><br/>
+                      <span className="font-semibold text-gray-800">{o.order_id}</span></p>
+                    <p><span className="text-sm text-gray-600">Placed</span><br/>
+                      <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
+                    <p><span className="text-sm text-gray-600">Items</span><br/>
+                      <span className="font-semibold text-gray-800">{itemCount}</span></p>
                   </div>
-                );
-              })}
-            </div>
-          )}
-        </main>
-      </div>
-    );
-  };
+
+                  {itemCount > 0 && (
+                    <div className="mt-4">
+                      <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-300">
+                            <tr>
+                              <th className="text-left py-2">Item Code</th>
+                              <th className="text-left py-2">Description</th>
+                              <th className="text-left py-2">Brand</th>
+                              <th className="text-left py-2">UOM</th>
+                              <th className="text-right py-2">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(o.items || []).map((it, idx) => (
+                              <tr key={idx} className="border-b border-gray-200">
+                                <td className="py-2">{it.item_code}</td>
+                                <td className="py-2">{it.description}</td>
+                                <td className="py-2">{it.brand || '—'}</td>
+                                <td className="py-2">{it.uom}</td>
+                                <td className="py-2 text-right">{it.quantity}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+    </div>
+  );
 
   /* ------------- Admin Dashboard ------------- */
   const AdminDashboard = () => {
@@ -1001,7 +1002,7 @@ const TanyFoodsApp = () => {
       );
     };
 
-    /* -------- Customers Panel (profiles table) -------- */
+    // -------- Customers Panel (profiles table) --------
     const CustomersPanel = () => {
       const [rows, setRows] = useState([]);
       const [loading, setLoading] = useState(true);
@@ -1088,7 +1089,7 @@ const TanyFoodsApp = () => {
         setNewUser({ email: '', first_name: '', last_name: '', company_name: '', is_admin: false, is_active: true });
         setRows(prev => {
           const m = new Map(prev.map(r => [r.email, r]));
-          (data || []).forEach(d => m.set(d.email, d));
+          data.forEach(d => m.set(d.email, d));
           return Array.from(m.values()).sort((a,b)=>a.email.localeCompare(b.email));
         });
       };
@@ -1299,8 +1300,9 @@ const TanyFoodsApp = () => {
             </button>
           </div>
 
-          {activeTab === 'orders' && <OrdersPanel orders={orders} />}
-          {activeTab === 'products' && (
+          {activeTab === 'orders' ? (
+            <OrdersPanel orders={orders} />
+          ) : activeTab === 'products' ? (
             <>
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Database Management</h2>
 
@@ -1351,8 +1353,9 @@ const TanyFoodsApp = () => {
                 </div>
               )}
             </>
+          ) : (
+            <CustomersPanel />
           )}
-          {activeTab === 'customers' && <CustomersPanel />}
         </div>
       </div>
     );
