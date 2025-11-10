@@ -1,10 +1,6 @@
-// src/App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import {
-  ShoppingCart, Search, Filter, ChevronLeft, Trash2,
-  Package, LogOut, Upload, History
-} from 'lucide-react';
+import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload, History } from 'lucide-react';
 
 /* =========================
    CSV helpers (no deps)
@@ -72,7 +68,7 @@ function parseCsv(text) {
   });
 }
 
-// Admin creds (simple for now)
+// Admin creds (keep simple for now)
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
@@ -112,12 +108,12 @@ function showToast(message) {
 const TanyFoodsApp = () => {
   // State
   const [products, setProducts] = useState([]);
-  const [orders, setOrders] = useState([]);     // holds recent orders (admin: all, customer: own)
+  const [orders, setOrders] = useState([]);
   const [cart, setCart] = useState({});
   const [loggedIn, setLoggedIn] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [userData, setUserData] = useState({});
-  const [currentPage, setCurrentPage] = useState('catalog'); // 'catalog'|'product_detail'|'cart'|'orders_history'
+  const [currentPage, setCurrentPage] = useState('catalog'); // 'catalog' | 'product_detail' | 'cart' | 'order_history'
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -144,7 +140,9 @@ const TanyFoodsApp = () => {
   // === Load recent orders (admin = all, customer = own) ===
   useEffect(() => {
     if (!loggedIn) return;
+
     (async () => {
+      // Build the base select with join to products via the FK on order_items.item_code
       const baseSelect = `
         id, order_number, placed_at, customer_name, company_name, email, user_id,
         order_items (
@@ -159,17 +157,20 @@ const TanyFoodsApp = () => {
         .order('placed_at', { ascending: false })
         .limit(50);
 
+      // If not admin, restrict to the logged-in user's orders (RLS will also enforce this)
       if (!isAdmin && userData?.id) {
         q = q.eq('user_id', userData.id);
       }
 
       const { data, error } = await q;
+
       if (error) {
         console.error('Load orders error:', error);
         alert('Failed to load orders: ' + error.message);
         return;
       }
 
+      // reshape to UI format
       const formatted = (data || []).map(o => ({
         order_id: o.id,
         order_number: o.order_number,
@@ -242,6 +243,7 @@ const TanyFoodsApp = () => {
 
   /* ------------- Cart ------------- */
   const addToCart = (product, uom, quantity) => {
+    const q = Math.max(1, parseInt(quantity, 10) || 1);
     const cartKey = product.item_code;
     if (cart[cartKey]) {
       alert('This item is already in your cart. Edit the quantity in the cart.');
@@ -254,16 +256,19 @@ const TanyFoodsApp = () => {
         description: product.description,
         brand: product.brand || '',
         uom,
-        quantity: parseInt(quantity)
+        quantity: q
       }
     });
     showToast('✅ Added to cart!');
   };
 
-  const updateCartQuantity = (cartKey, newQuantity) => {
+  const updateCartQuantity = (cartKey, newValue) => {
+    // Let the user type freely but enforce positive integers
+    const v = String(newValue ?? '').replace(/[^\d]/g, '');
+    const n = v === '' ? 1 : Math.max(1, parseInt(v, 10) || 1);
     setCart({
       ...cart,
-      [cartKey]: { ...cart[cartKey], quantity: parseInt(newQuantity) }
+      [cartKey]: { ...cart[cartKey], quantity: n }
     });
   };
 
@@ -285,7 +290,7 @@ const TanyFoodsApp = () => {
       .from('orders')
       .insert([{
         order_number,
-        user_id: userData.id,
+        user_id: userData.id, // profiles.id (UUID)
         placed_at: now.toISOString(),
         customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || null,
         company_name: userData.company_name || null,
@@ -331,7 +336,7 @@ const TanyFoodsApp = () => {
     setCart({});
     setShowOrderConfirmation(false);
     alert(`✅ Order ${order_number} submitted!`);
-    setCurrentPage('orders_history'); // jump customer to their Order History after submission
+    setCurrentPage('order_history');
   };
 
   /* ------------- Filters ------------- */
@@ -389,7 +394,7 @@ const TanyFoodsApp = () => {
                 className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
                 Continue
               </button>
-              <p className="text-xs text-gray-500 text-center" />
+              <p className="text-xs text-gray-500 text-center"></p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -448,16 +453,9 @@ const TanyFoodsApp = () => {
               <h1 className="text-2xl md:text-3xl font-bold">Tany Foods</h1>
               <p className="text-teal-100 text-sm">Welcome, {userData.first_name || 'Guest'}!</p>
             </div>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentPage('orders_history')}
-                className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
-                <History size={18} /><span className="hidden sm:inline">Order History</span>
-              </button>
-              <button onClick={handleLogout}
-                className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
-                <LogOut size={18} /><span className="hidden sm:inline">Logout</span>
-              </button>
-            </div>
+            <button onClick={handleLogout} className="flex items-center gap-2 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800">
+              <LogOut size={18} /><span className="hidden sm:inline">Logout</span>
+            </button>
           </div>
 
           <div className="flex gap-2">
@@ -490,8 +488,8 @@ const TanyFoodsApp = () => {
               className="bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
               <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
             </button>
-            <button onClick={() => setCurrentPage('orders_history')}
-              className="bg-slate-700 text-white py-2 rounded-lg font-medium hover:bg-slate-800 flex items-center justify-center gap-2">
+            <button onClick={() => setCurrentPage('order_history')}
+              className="bg-white text-teal-700 py-2 rounded-lg font-medium hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
               <History size={20} /> Order History
             </button>
           </div>
@@ -515,7 +513,7 @@ const TanyFoodsApp = () => {
 
   const ProductDetailPage = () => {
     const [selectedUom, setSelectedUom] = useState('Case');
-    const [quantity, setQuantity] = useState(1);
+    const [quantity, setQuantity] = useState('1'); // string so users can type naturally
     if (!selectedProduct) return null;
 
     const imgSrc = selectedProduct.image_url || selectedProduct.image_path || 'https://via.placeholder.com/600x400';
@@ -523,25 +521,30 @@ const TanyFoodsApp = () => {
     if (selectedProduct.allow_case) uomOptions.push('Case');
     if (selectedProduct.allow_each) uomOptions.push('Each');
 
+    // On change: allow only digits; do not force until submit/blur
+    const handleQtyChange = (e) => {
+      const raw = e.target.value;
+      const onlyDigits = raw.replace(/[^\d]/g, '');
+      setQuantity(onlyDigits === '' ? '' : onlyDigits);
+    };
+    const handleQtyBlur = () => {
+      const n = Math.max(1, parseInt(quantity, 10) || 1);
+      setQuantity(String(n));
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
-            <div className="grid grid-cols-2 gap-2">
+            <div className="flex gap-2">
               <button onClick={() => setCurrentPage('catalog')}
-                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+                className="flex-1 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
                 <ChevronLeft size={20} /> Back to Catalog
               </button>
-              <div className="flex gap-2">
-                <button onClick={() => setCurrentPage('cart')}
-                  className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
-                  <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-                </button>
-                <button onClick={() => setCurrentPage('orders_history')}
-                  className="flex-1 bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2">
-                  <History size={20} /> History
-                </button>
-              </div>
+              <button onClick={() => setCurrentPage('cart')}
+                className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
+                <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
+              </button>
             </div>
           </div>
         </header>
@@ -576,12 +579,20 @@ const TanyFoodsApp = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                    <input type="number" min="1" value={quantity}
-                      onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="\d*"
+                      value={quantity}
+                      onChange={handleQtyChange}
+                      onBlur={handleQtyBlur}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                      placeholder="1"
+                    />
                   </div>
 
-                  <button onClick={() => { addToCart(selectedProduct, selectedUom, quantity); setCurrentPage('catalog'); }}
+                  <button
+                    onClick={() => { addToCart(selectedProduct, selectedUom, quantity === '' ? 1 : quantity); setCurrentPage('catalog'); }}
                     className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2">
                     <ShoppingCart size={20} /> Add to Cart
                   </button>
@@ -600,18 +611,14 @@ const TanyFoodsApp = () => {
     <div className="min-h-screen bg-gray-50">
       <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             <button onClick={() => setCurrentPage('catalog')}
               className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-              <ChevronLeft size={20} /> Catalog
+              <ChevronLeft size={20} /> Back to Catalog
             </button>
-            <button onClick={() => setCurrentPage('orders_history')}
-              className="bg-slate-700 px-4 py-2 rounded-lg hover:bg-slate-800 flex items-center justify-center gap-2">
-              <History size={20} /> History
-            </button>
-            <button onClick={handleLogout}
-              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-              <LogOut size={18} /> Logout
+            <button onClick={() => setCurrentPage('order_history')}
+              className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
+              <History size={18} /> Order History
             </button>
           </div>
         </div>
@@ -647,9 +654,22 @@ const TanyFoodsApp = () => {
                         <td className="px-4 py-3 text-sm">{item.brand || '—'}</td>
                         <td className="px-4 py-3 text-sm">{item.uom}</td>
                         <td className="px-4 py-3">
-                          <input type="number" min="1" value={item.quantity}
-                            onChange={(e) => updateCartQuantity(key, e.target.value)}
-                            className="w-20 px-2 py-1 border border-gray-300 rounded text-sm" />
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            pattern="\d*"
+                            value={String(item.quantity)}
+                            onChange={(e) => {
+                              const raw = e.target.value;
+                              const onlyDigits = raw.replace(/[^\d]/g, '');
+                              updateCartQuantity(key, onlyDigits === '' ? '1' : onlyDigits);
+                            }}
+                            onBlur={(e) => {
+                              const n = Math.max(1, parseInt(e.target.value,10) || 1);
+                              updateCartQuantity(key, String(n));
+                            }}
+                            className="w-24 px-2 py-1 border border-gray-300 rounded text-sm"
+                          />
                         </td>
                         <td className="px-4 py-3">
                           <button onClick={() => removeFromCart(key)} className="text-red-600 hover:text-red-800">
@@ -686,77 +706,100 @@ const TanyFoodsApp = () => {
     </div>
   );
 
-  /* -------- Customer Order History Page -------- */
-  const CustomerOrdersPage = () => {
-    // orders state already filtered for the logged-in user (when !isAdmin)
+  /* -------- Order History (Customer) -------- */
+  const OrderHistoryPage = () => {
+    // Reuse `orders` already fetched for the logged-in user (non-admin)
+    const [expanded, setExpanded] = useState(() => new Set());
+
+    const toggleExpand = (id) => {
+      const next = new Set(expanded);
+      next.has(id) ? next.delete(id) : next.add(id);
+      setExpanded(next);
+    };
+
     return (
       <div className="min-h-screen bg-gray-50">
         <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
           <div className="container mx-auto px-4 py-4">
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               <button onClick={() => setCurrentPage('catalog')}
                 className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-                <ChevronLeft size={20} /> Catalog
+                <ChevronLeft size={20} /> Back to Catalog
               </button>
               <button onClick={() => setCurrentPage('cart')}
                 className="bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
                 <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-              </button>
-              <button onClick={handleLogout}
-                className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-                <LogOut size={18} /> Logout
               </button>
             </div>
           </div>
         </header>
 
         <main className="container mx-auto px-4 py-6 max-w-4xl">
-          <h1 className="text-3xl font-bold text-gray-800 mb-6">Order History</h1>
+          <h1 className="text-3xl font-bold text-gray-800 mb-6">Your Orders</h1>
 
           {orders.length === 0 ? (
             <div className="bg-white rounded-lg shadow p-8 text-center">
               <Package size={64} className="mx-auto text-gray-300 mb-4" />
-              <p className="text-gray-500">No orders yet. Place your first order from the catalog!</p>
+              <p className="text-gray-500">No orders yet. Place your first order from the catalog.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {orders.map((o) => {
+              {orders.map(o => {
+                const id = o.order_id;
                 const itemCount = (o.items || []).length;
+                const isOpen = expanded.has(id);
                 return (
-                  <div key={o.order_id} className="bg-white rounded-lg shadow p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                      <p><span className="text-sm text-gray-600">Order #</span><br/>
-                        <span className="font-semibold text-gray-800">{o.order_number || o.order_id}</span></p>
-                      <p><span className="text-sm text-gray-600">Placed</span><br/>
-                        <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
-                      <p><span className="text-sm text-gray-600">Items</span><br/>
-                        <span className="font-semibold text-gray-800">{itemCount}</span></p>
+                  <div key={id} className="bg-white rounded-lg shadow-lg p-6">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <p><span className="text-sm text-gray-600">Order #</span><br/>
+                            <span className="font-semibold text-gray-800">{o.order_number || id}</span></p>
+                          <p><span className="text-sm text-gray-600">Placed</span><br/>
+                            <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
+                          {o.company_name && (
+                            <p><span className="text-sm text-gray-600">Company</span><br/>
+                              <span className="font-semibold text-gray-800">{o.company_name}</span></p>
+                          )}
+                          {o.email && (
+                            <p><span className="text-sm text-gray-600">Email</span><br/>
+                              <span className="font-semibold text-gray-800">{o.email}</span></p>
+                          )}
+                          <p><span className="text-sm text-gray-600">Total Items</span><br/>
+                            <span className="font-semibold text-gray-800">{itemCount}</span></p>
+                        </div>
+                      </div>
+                      <button onClick={() => toggleExpand(id)} className="text-sm px-3 py-2 rounded bg-gray-100 hover:bg-gray-200">
+                        {isOpen ? 'Hide items' : `Show items (${itemCount})`}
+                      </button>
                     </div>
 
-                    {itemCount > 0 && (
-                      <div className="mt-4 overflow-x-auto">
-                        <table className="w-full text-sm">
-                          <thead className="border-b border-gray-300">
-                            <tr>
-                              <th className="text-left py-2">Item Code</th>
-                              <th className="text-left py-2">Description</th>
-                              <th className="text-left py-2">Brand</th>
-                              <th className="text-left py-2">UOM</th>
-                              <th className="text-right py-2">Qty</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {o.items.map((it, idx) => (
-                              <tr key={idx} className="border-b border-gray-200">
-                                <td className="py-2">{it.item_code}</td>
-                                <td className="py-2">{it.description || '—'}</td>
-                                <td className="py-2">{it.brand || '—'}</td>
-                                <td className="py-2">{it.uom}</td>
-                                <td className="py-2 text-right">{it.quantity}</td>
+                    {isOpen && (
+                      <div className="mt-4">
+                        <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead className="border-b border-gray-300">
+                              <tr>
+                                <th className="text-left py-2">Item Code</th>
+                                <th className="text-left py-2">Description</th>
+                                <th className="text-left py-2">Brand</th>
+                                <th className="text-left py-2">UOM</th>
+                                <th className="text-right py-2">Qty</th>
                               </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                            </thead>
+                            <tbody>
+                              {(o.items || []).map((it, idx) => (
+                                <tr key={idx} className="border-b border-gray-200">
+                                  <td className="py-2">{it.item_code}</td>
+                                  <td className="py-2">{it.description}</td>
+                                  <td className="py-2">{it.brand || '—'}</td>
+                                  <td className="py-2">{it.uom}</td>
+                                  <td className="py-2 text-right">{it.quantity}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
                     )}
                   </div>
@@ -958,6 +1001,265 @@ const TanyFoodsApp = () => {
       );
     };
 
+    /* -------- Customers Panel (profiles table) -------- */
+    const CustomersPanel = () => {
+      const [rows, setRows] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [adding, setAdding] = useState(false);
+      const [newUser, setNewUser] = useState({
+        email: '', first_name: '', last_name: '', company_name: '',
+        is_admin: false, is_active: true
+      });
+
+      useEffect(() => {
+        (async () => {
+          setLoading(true);
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, email, first_name, last_name, company_name, is_admin, is_active')
+            .order('email', { ascending: true });
+
+          if (error) {
+            console.error(error);
+            alert('Failed to load customers: ' + error.message);
+            setLoading(false);
+            return;
+          }
+          setRows(data || []);
+          setLoading(false);
+        })();
+      }, []);
+
+      const toBool = v => ['true','1','yes','y','on'].includes(String(v).trim().toLowerCase());
+
+      const handleCustomersCsvUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const parsed = parseCsv(text);
+
+        const payload = parsed
+          .filter(r => r.email && String(r.email).includes('@'))
+          .map(r => ({
+            email: String(r.email).trim().toLowerCase(),
+            first_name: r.first_name?.trim() || null,
+            last_name: r.last_name?.trim() || null,
+            company_name: r.company_name?.trim() || null,
+            is_admin: r.is_admin !== undefined ? toBool(r.is_admin) : false,
+            is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+          }));
+
+        if (payload.length === 0) return alert('CSV has no valid rows.');
+
+        const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'email' });
+        if (error) {
+          console.error(error);
+          return alert('Upsert failed: ' + error.message);
+        }
+
+        showToast(`✅ Saved ${payload.length} customers`);
+        const { data, error: refErr } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, company_name, is_admin, is_active')
+          .order('email', { ascending: true });
+        if (!refErr) setRows(data || []);
+      };
+
+      const addCustomer = async () => {
+        if (!newUser.email || !newUser.email.includes('@')) {
+          return alert('Enter a valid email');
+        }
+        setAdding(true);
+        const payload = {
+          email: newUser.email.trim().toLowerCase(),
+          first_name: newUser.first_name || null,
+          last_name: newUser.last_name || null,
+          company_name: newUser.company_name || null,
+          is_admin: !!newUser.is_admin,
+          is_active: !!newUser.is_active
+        };
+        const { data, error } = await supabase.from('profiles').upsert([payload], { onConflict: 'email' }).select('*');
+        setAdding(false);
+        if (error) {
+          console.error(error);
+          return alert('Save failed: ' + error.message);
+        }
+        showToast('✅ Customer saved');
+        setNewUser({ email: '', first_name: '', last_name: '', company_name: '', is_admin: false, is_active: true });
+        setRows(prev => {
+          const m = new Map(prev.map(r => [r.email, r]));
+          (data || []).forEach(d => m.set(d.email, d));
+          return Array.from(m.values()).sort((a,b)=>a.email.localeCompare(b.email));
+        });
+      };
+
+      const updateField = (id, key, value) => {
+        setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
+      };
+
+      const saveRow = async (row) => {
+        const payload = {
+          id: row.id,
+          email: row.email?.trim().toLowerCase(),
+          first_name: row.first_name || null,
+          last_name: row.last_name || null,
+          company_name: row.company_name || null,
+          is_admin: !!row.is_admin,
+          is_active: !!row.is_active
+        };
+        const { error } = await supabase.from('profiles').update(payload).eq('id', row.id);
+        if (error) {
+          console.error(error);
+          alert('Update failed: ' + error.message);
+        } else {
+          showToast('✅ Saved');
+        }
+      };
+
+      const deleteRow = async (id) => {
+        if (!confirm('Delete this customer?')) return;
+        const { error } = await supabase.from('profiles').delete().eq('id', id);
+        if (error) {
+          console.error(error);
+          return alert('Delete failed: ' + error.message);
+        }
+        setRows(prev => prev.filter(r => r.id !== id));
+        showToast('🗑️ Deleted');
+      };
+
+      return (
+        <div className="space-y-6">
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Upload Authorized Customers (CSV)</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Required headers: <code>email, first_name, last_name, company_name, is_admin, is_active</code>
+            </p>
+            <label className="inline-flex items-center justify-center gap-2 bg-teal-600 text-white py-2 px-4 rounded-lg cursor-pointer hover:bg-teal-700">
+              <Upload size={18} />
+              <span>Choose CSV File</span>
+              <input type="file" accept=".csv" onChange={handleCustomersCsvUpload} className="hidden" />
+            </label>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Add Customer</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <input className="border rounded px-3 py-2" placeholder="Email *" value={newUser.email}
+                    onChange={e=>setNewUser({...newUser, email: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="First name" value={newUser.first_name}
+                    onChange={e=>setNewUser({...newUser, first_name: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="Last name" value={newUser.last_name}
+                    onChange={e=>setNewUser({...newUser, last_name: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="Company" value={newUser.company_name}
+                    onChange={e=>setNewUser({...newUser, company_name: e.target.value})}/>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={newUser.is_admin}
+                        onChange={e=>setNewUser({...newUser, is_admin: e.target.checked})}/>
+                  Admin
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={newUser.is_active}
+                        onChange={e=>setNewUser({...newUser, is_active: e.target.checked})}/>
+                  Active
+                </label>
+              </div>
+            </div>
+            <button
+              onClick={addCustomer}
+              disabled={adding}
+              className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
+              {adding ? 'Saving…' : 'Add / Update'}
+            </button>
+          </div>
+
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Authorized Customers</h3>
+
+            {loading ? (
+              <p className="text-gray-500">Loading…</p>
+            ) : rows.length === 0 ? (
+              <p className="text-gray-500">No customers yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-teal-600 text-white">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Email</th>
+                      <th className="px-3 py-2 text-left">First</th>
+                      <th className="px-3 py-2 text-left">Last</th>
+                      <th className="px-3 py-2 text-left">Company</th>
+                      <th className="px-3 py-2 text-center">Admin</th>
+                      <th className="px-3 py-2 text-center">Active</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {rows.map(r => (
+                      <tr key={r.id}>
+                        <td className="px-3 py-2">
+                          <input
+                            className="border rounded px-2 py-1 w-full"
+                            value={r.email || ''}
+                            onChange={e=>updateField(r.id, 'email', e.target.value)}
+                            onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.first_name || ''}
+                                onChange={e=>updateField(r.id, 'first_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.last_name || ''}
+                                onChange={e=>updateField(r.id, 'last_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.company_name || ''}
+                                onChange={e=>updateField(r.id, 'company_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <input type="checkbox"
+                                checked={!!r.is_admin}
+                                onChange={e=>{
+                                  updateField(r.id, 'is_admin', e.target.checked);
+                                  saveRow({ ...r, is_admin: e.target.checked });
+                                }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <input type="checkbox"
+                                checked={!!r.is_active}
+                                onChange={e=>{
+                                  updateField(r.id, 'is_active', e.target.checked);
+                                  saveRow({ ...r, is_active: e.target.checked });
+                                }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button onClick={()=>deleteRow(r.id)} className="text-red-600 hover:text-red-800">
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
     // Admin render
     return (
       <div className="min-h-screen bg-gray-50">
@@ -988,11 +1290,17 @@ const TanyFoodsApp = () => {
               }`}>
               <Upload size={20} /> Products
             </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+                activeTab === 'customers' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
+              }`}>
+              Customers
+            </button>
           </div>
 
-          {activeTab === 'orders' ? (
-            <OrdersPanel orders={orders} />
-          ) : (
+          {activeTab === 'orders' && <OrdersPanel orders={orders} />}
+          {activeTab === 'products' && (
             <>
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Database Management</h2>
 
@@ -1044,6 +1352,7 @@ const TanyFoodsApp = () => {
               )}
             </>
           )}
+          {activeTab === 'customers' && <CustomersPanel />}
         </div>
       </div>
     );
@@ -1055,7 +1364,7 @@ const TanyFoodsApp = () => {
   if (currentPage === 'catalog') return <CatalogPage />;
   if (currentPage === 'product_detail') return <ProductDetailPage />;
   if (currentPage === 'cart') return <CartPage />;
-  if (currentPage === 'orders_history') return <CustomerOrdersPage />;
+  if (currentPage === 'order_history') return <OrderHistoryPage />;
   return <CatalogPage />;
 };
 
