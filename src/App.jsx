@@ -88,7 +88,6 @@ function showToast(message) {
    ========================= */
 const TanyFoodsApp = () => {
   // State
-  const [users, setUsers] = useState({});
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [cart, setCart] = useState({});
@@ -119,16 +118,6 @@ const TanyFoodsApp = () => {
       setProducts(data || []);
     })();
   }, []);
-
-  // LocalStorage helpers
-  const saveUsers = (newUsers) => {
-    localStorage.setItem('tany_users', JSON.stringify(newUsers));
-    setUsers(newUsers);
-  };
-  const saveOrders = (newOrders) => {
-    localStorage.setItem('tany_orders', JSON.stringify(newOrders));
-    setOrders(newOrders);
-  };
 
   /* ------------- Auth ------------- */
   const handleSignup = (formData) => {
