@@ -120,47 +120,6 @@ const TanyFoodsApp = () => {
   }, []);
 
   /* ------------- Auth ------------- */
-  const handleSignup = (formData) => {
-    const { firstName, lastName, companyName, email, password, confirmPassword } = formData;
-    if (!firstName || !lastName || !companyName || !email || !password) {
-      alert('Please fill in all required fields');
-      return;
-    }
-    if (password !== confirmPassword) {
-      alert('Passwords do not match');
-      return;
-    }
-    if (users[email]) {
-      alert('Email already registered. Please log in.');
-      return;
-    }
-    const newUsers = {
-      ...users,
-      [email]: { first_name: firstName, last_name: lastName, company_name: companyName, password }
-    };
-    saveUsers(newUsers);
-    showToast('Account created successfully! Please log in.');
-    setShowSignup(false);
-  };
-
-  const handleLogin = (email, password) => {
-    // Fixed customer login for demos
-    if (TEST_MODE && email === CUSTOMER_EMAIL && password === CUSTOMER_PASSWORD) {
-      setLoggedIn(true);
-      setUserData({ ...CUSTOMER_DEMO_PROFILE, email });
-      setIsAdmin(false);
-      return;
-    }
-    // Local faux auth
-    if (users[email] && users[email].password === password) {
-      setLoggedIn(true);
-      setUserData({ ...users[email], email });
-      setIsAdmin(false);
-    } else {
-      alert('Invalid credentials');
-    }
-  };
-
   const handleAdminLogin = (username, password) => {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       setLoggedIn(true);
