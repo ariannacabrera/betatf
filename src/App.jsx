@@ -1,6 +1,9 @@
+// App.jsx
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
-import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload } from 'lucide-react';
+import {
+  ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload, Users
+} from 'lucide-react';
 
 /* =========================
    CSV helpers (no deps)
@@ -53,7 +56,22 @@ function downloadTextFile(filename, text) {
   URL.revokeObjectURL(url);
 }
 
-// Admin creds (keep simple for now)
+/* =========================
+   Minimal CSV -> rows of objects
+   ========================= */
+function parseCsv(text) {
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+  if (lines.length < 2) return [];
+  const headers = lines[0].split(',').map(h => h.trim());
+  return lines.slice(1).map(line => {
+    const cols = line.split(',').map(v => v.trim());
+    const row = {};
+    headers.forEach((h, i) => (row[h] = cols[i] ?? ''));
+    return row;
+  });
+}
+
+// Admin creds (simple)
 const ADMIN_USERNAME = "admin";
 const ADMIN_PASSWORD = "admin123";
 
@@ -122,91 +140,86 @@ const TanyFoodsApp = () => {
     })();
   }, []);
 
-// === Load recent orders (admin = all, customer = own) ===
-useEffect(() => {
-  if (!loggedIn) return;
+  // Load recent orders (admin = all, customer = own)
+  useEffect(() => {
+    if (!loggedIn) return;
 
-  (async () => {
-    // Build the base select with a join to products via the FK on order_items.item_code
-    const baseSelect = `
-      id, order_number, placed_at, customer_name, company_name, email, user_id,
-      order_items (
-        item_code, uom, quantity,
-        products:products!order_items_item_code_fkey (description, brand)
-      )
-    `;
+    (async () => {
+      const baseSelect = `
+        id, order_number, placed_at, customer_name, company_name, email, user_id,
+        order_items (
+          item_code, uom, quantity,
+          products:products!order_items_item_code_fkey (description, brand)
+        )
+      `;
 
-    let q = supabase
-      .from('orders')
-      .select(baseSelect)
-      .order('placed_at', { ascending: false })
-      .limit(50);
+      let q = supabase
+        .from('orders')
+        .select(baseSelect)
+        .order('placed_at', { ascending: false })
+        .limit(50);
 
-    // If not admin, restrict to the logged-in user's orders (RLS will also enforce this)
-    if (!isAdmin && userData?.id) {
-      q = q.eq('user_id', userData.id);
-    }
+      if (!isAdmin && userData?.id) {
+        q = q.eq('user_id', userData.id);
+      }
 
-    const { data, error } = await q;
+      const { data, error } = await q;
 
-    if (error) {
-      console.error('Load orders error:', error);
-      alert('Failed to load orders: ' + error.message);
-      return;
-    }
+      if (error) {
+        console.error('Load orders error:', error);
+        alert('Failed to load orders: ' + error.message);
+        return;
+      }
 
-    // reshape to OrdersPanel format
-    const formatted = (data || []).map(o => ({
-      order_id: o.id,
-      timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
-      customer_name: o.customer_name,
-      company_name: o.company_name,
-      email: o.email,
-      items: (o.order_items || []).map(it => ({
-        item_code: it.item_code,
-        uom: it.uom,
-        quantity: it.quantity,
-        description: it.products?.description || '',
-        brand: it.products?.brand || ''
-      }))
-    }));
+      const formatted = (data || []).map(o => ({
+        order_id: o.id,
+        timestamp: new Date(o.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
+        customer_name: o.customer_name,
+        company_name: o.company_name,
+        email: o.email,
+        items: (o.order_items || []).map(it => ({
+          item_code: it.item_code,
+          uom: it.uom,
+          quantity: it.quantity,
+          description: it.products?.description || '',
+          brand: it.products?.brand || ''
+        }))
+      }));
 
-    setOrders(formatted);
-  })();
-}, [loggedIn, isAdmin, userData?.id]);
-
+      setOrders(formatted);
+    })();
+  }, [loggedIn, isAdmin, userData?.id]);
 
   /* ------------- Auth ------------- */
- // ADD: email-only customer login against profiles
-const tryCustomerLogin = async (rawEmail) => {
-  const e = (rawEmail || "").trim().toLowerCase();
-  if (!e) return alert("Enter your email");
+  // Email-only customer login against profiles
+  const tryCustomerLogin = async (rawEmail) => {
+    const e = (rawEmail || "").trim().toLowerCase();
+    if (!e) return alert("Enter your email");
 
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, email, first_name, last_name, company_name, is_admin, is_active")
-    .eq("email", e)
-    .maybeSingle();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, email, first_name, last_name, company_name, is_admin, is_active")
+      .eq("email", e)
+      .maybeSingle();
 
-  if (error) {
-    console.error("Supabase error:", error);
-    return alert("Error checking access: " + (error.message || "unknown"));
-  }
-  if (!data || data.is_active === false) {
-    return alert("This email is not authorized.");
-  }
+    if (error) {
+      console.error("Supabase error:", error);
+      return alert("Error checking access: " + (error.message || "unknown"));
+    }
+    if (!data || data.is_active === false) {
+      return alert("This email is not authorized.");
+    }
 
-  // Success: set session state
-  setLoggedIn(true);
-  setIsAdmin(Boolean(data.is_admin)); // uses your existing is_admin boolean
-  setUserData({
-    id: data.id,                       // keep this — useful for orders FK later
-    email: data.email,
-    first_name: data.first_name || "",
-    last_name: data.last_name || "",
-    company_name: data.company_name || ""
-  });
-};
+    setLoggedIn(true);
+    setIsAdmin(Boolean(data.is_admin));
+    setUserData({
+      id: data.id,
+      email: data.email,
+      first_name: data.first_name || "",
+      last_name: data.last_name || "",
+      company_name: data.company_name || ""
+    });
+  };
 
   const handleAdminLogin = (username, password) => {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
@@ -259,65 +272,61 @@ const tryCustomerLogin = async (rawEmail) => {
     setCart(next);
   };
 
-const submitOrder = async () => {
-  if (!userData?.id) return alert('Not logged in.');
-  if (Object.keys(cart).length === 0) return alert('Your cart is empty.');
+  const submitOrder = async () => {
+    if (!userData?.id) return alert('Not logged in.');
+    if (Object.keys(cart).length === 0) return alert('Your cart is empty.');
 
-  const now = new Date();
-  const order_number = `ORD-${now.toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
+    const now = new Date();
+    const order_number = `ORD-${now.toISOString().replace(/[-:T.]/g, '').slice(0, 14)}`;
 
-  // 1) Insert order header
-  const { data: orderRow, error: orderErr } = await supabase
-    .from('orders')
-    .insert([{
-      order_number,
-      user_id: userData.id, // <-- profiles.id (UUID)
-      placed_at: now.toISOString(),
-      customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || null,
-      company_name: userData.company_name || null,
-      email: userData.email || null
-    }])
-    .select('id, order_number, placed_at, customer_name, company_name, email')
-    .single();
+    const { data: orderRow, error: orderErr } = await supabase
+      .from('orders')
+      .insert([{
+        order_number,
+        user_id: userData.id,
+        placed_at: now.toISOString(),
+        customer_name: `${userData.first_name ?? ''} ${userData.last_name ?? ''}`.trim() || null,
+        company_name: userData.company_name || null,
+        email: userData.email || null
+      }])
+      .select('id, order_number, placed_at, customer_name, company_name, email')
+      .single();
 
-  if (orderErr) {
-    console.error(orderErr);
-    return alert('Order create failed: ' + orderErr.message);
-  }
+    if (orderErr) {
+      console.error(orderErr);
+      return alert('Order create failed: ' + orderErr.message);
+    }
 
-  // 2) Insert line items (FK to products.item_code, uom must be 'Case' or 'Each')
-  const items = Object.values(cart).map(it => ({
-    order_id: orderRow.id,
-    item_code: it.item_code,
-    uom: it.uom,
-    quantity: Number(it.quantity) || 1
-  }));
+    const items = Object.values(cart).map(it => ({
+      order_id: orderRow.id,
+      item_code: it.item_code,
+      uom: it.uom,
+      quantity: Number(it.quantity) || 1
+    }));
 
-  const { error: itemsErr } = await supabase.from('order_items').insert(items);
+    const { error: itemsErr } = await supabase.from('order_items').insert(items);
 
-  if (itemsErr) {
-    console.error(itemsErr);
-    // rollback header so you don't leave an empty order
-    await supabase.from('orders').delete().eq('id', orderRow.id);
-    return alert('Order items insert failed: ' + itemsErr.message);
-  }
+    if (itemsErr) {
+      console.error(itemsErr);
+      await supabase.from('orders').delete().eq('id', orderRow.id);
+      return alert('Order items insert failed: ' + itemsErr.message);
+    }
 
-  // 3) Update UI and clear cart
-  const newOrderForUI = {
-    order_id: orderRow.id,
-    timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
-    customer_name: orderRow.customer_name,
-    company_name: orderRow.company_name,
-    email: orderRow.email,
-    items
+    const newOrderForUI = {
+      order_id: orderRow.id,
+      timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
+      customer_name: orderRow.customer_name,
+      company_name: orderRow.company_name,
+      email: orderRow.email,
+      items
+    };
+
+    setOrders(prev => [newOrderForUI, ...prev]);
+    setCart({});
+    setShowOrderConfirmation(false);
+    alert(`✅ Order ${order_number} submitted!`);
+    setCurrentPage('catalog');
   };
-
-  setOrders(prev => [newOrderForUI, ...prev]);
-  setCart({});
-  setShowOrderConfirmation(false);
-  alert(`✅ Order ${order_number} submitted!`);
-  setCurrentPage('catalog');
-};
 
   /* ------------- Filters ------------- */
   const filteredProducts = products.filter(p => {
@@ -331,79 +340,78 @@ const submitOrder = async () => {
   const categories = ['All', ...new Set(products.map(p => p.category || 'Uncategorized'))];
 
   /* ------------- Pages ------------- */
-const LoginPage = () => {
-  const [activeTab, setActiveTab] = useState('customer');
-  const [email, setEmail] = useState('');
-  const [adminUser, setAdminUser] = useState('');
-  const [adminPass, setAdminPass] = useState('');
+  const LoginPage = () => {
+    const [activeTab, setActiveTab] = useState('customer');
+    const [email, setEmail] = useState('');
+    const [adminUser, setAdminUser] = useState('');
+    const [adminPass, setAdminPass] = useState('');
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
-        <div className="text-center mb-8">
-          <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
-          <p className="text-gray-600 text-sm">Products you long for™</p>
-          <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
-        </div>
-        <h2 className="text-2xl font-semibold text-gray-800 mb-6">Welcome Back!</h2>
-
-        <div className="flex border-b border-gray-200 mb-6">
-          <button
-            onClick={() => setActiveTab('customer')}
-            className={`flex-1 py-3 font-medium ${activeTab === 'customer' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
-            Customer Login
-          </button>
-          <button
-            onClick={() => setActiveTab('admin')}
-            className={`flex-1 py-3 font-medium ${activeTab === 'admin' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
-            Admin Login
-          </button>
-        </div>
-
-        {activeTab === 'customer' ? (
-          <div className="space-y-4">
-            <input
-              type="email"
-              placeholder="Authorized email"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-            />
-            <button
-              onClick={() => tryCustomerLogin(email)}
-              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
-              Continue
-            </button>
-            <p className="text-xs text-gray-500 text-center">
-            </p>
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-teal-50 to-teal-100 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full">
+          <div className="text-center mb-8">
+            <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
+            <p className="text-gray-600 text-sm">Products you long for™</p>
+            <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
           </div>
-        ) : (
-          <div className="space-y-4">
-            <input
-              type="text"
-              placeholder="Admin Username"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={adminUser}
-              onChange={(e) => setAdminUser(e.target.value)}
-            />
-            <input
-              type="password"
-              placeholder="Admin Password"
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
-              value={adminPass}
-              onChange={(e) => setAdminPass(e.target.value)}
-            />
+          <h2 className="text-2xl font-semibold text-gray-800 mb-6">Welcome Back!</h2>
+
+          <div className="flex border-b border-gray-200 mb-6">
             <button
-              onClick={() => handleAdminLogin(adminUser, adminPass)}
-              className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
-              Admin Log In
+              onClick={() => setActiveTab('customer')}
+              className={`flex-1 py-3 font-medium ${activeTab === 'customer' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
+              Customer Login
+            </button>
+            <button
+              onClick={() => setActiveTab('admin')}
+              className={`flex-1 py-3 font-medium ${activeTab === 'admin' ? 'text-teal-600 border-b-2 border-teal-600' : 'text-gray-500'}`}>
+              Admin Login
             </button>
           </div>
-        )}
+
+          {activeTab === 'customer' ? (
+            <div className="space-y-4">
+              <input
+                type="email"
+                placeholder="Authorized email"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+              />
+              <button
+                onClick={() => tryCustomerLogin(email)}
+                className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
+                Continue
+              </button>
+              <p className="text-xs text-gray-500 text-center" />
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <input
+                type="text"
+                placeholder="Admin Username"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                value={adminUser}
+                onChange={(e) => setAdminUser(e.target.value)}
+              />
+              <input
+                type="password"
+                placeholder="Admin Password"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent"
+                value={adminPass}
+                onChange={(e) => setAdminPass(e.target.value)}
+              />
+              <button
+                onClick={() => handleAdminLogin(adminUser, adminPass)}
+                className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700">
+                Admin Log In
+              </button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   const ProductCard = ({ product }) => {
     const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/600x400';
@@ -542,7 +550,7 @@ const LoginPage = () => {
                     <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
                     <input type="number" min="1" value={quantity}
                       onChange={(e) => setQuantity(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent" />
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus-border-transparent" />
                   </div>
 
                   <button onClick={() => { addToCart(selectedProduct, selectedUom, quantity); setCurrentPage('catalog'); }}
@@ -829,6 +837,269 @@ const LoginPage = () => {
       );
     };
 
+    // -------- Customers Panel (profiles table) --------
+    const CustomersPanel = () => {
+      const [rows, setRows] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [adding, setAdding] = useState(false);
+      const [newUser, setNewUser] = useState({
+        email: '', first_name: '', last_name: '', company_name: '',
+        is_admin: false, is_active: true
+      });
+
+      useEffect(() => {
+        (async () => {
+          setLoading(true);
+          const { data, error } = await supabase
+            .from('profiles')
+            .select('id, email, first_name, last_name, company_name, is_admin, is_active')
+            .order('email', { ascending: true });
+
+          if (error) {
+            console.error(error);
+            alert('Failed to load customers: ' + error.message);
+            setLoading(false);
+            return;
+          }
+          setRows(data || []);
+          setLoading(false);
+        })();
+      }, []);
+
+      const toBool = v => ['true','1','yes','y','on'].includes(String(v).trim().toLowerCase());
+
+      const handleCustomersCsvUpload = async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        const parsed = parseCsv(text);
+
+        // expected headers: email, first_name, last_name, company_name, is_admin, is_active
+        const payload = parsed
+          .filter(r => r.email && String(r.email).includes('@'))
+          .map(r => ({
+            email: String(r.email).trim().toLowerCase(),
+            first_name: r.first_name?.trim() || null,
+            last_name: r.last_name?.trim() || null,
+            company_name: r.company_name?.trim() || null,
+            is_admin: r.is_admin !== undefined ? toBool(r.is_admin) : false,
+            is_active: r.is_active !== undefined ? toBool(r.is_active) : true,
+          }));
+
+        if (payload.length === 0) return alert('CSV has no valid rows.');
+
+        const { error } = await supabase.from('profiles').upsert(payload, { onConflict: 'email' });
+        if (error) {
+          console.error(error);
+          return alert('Upsert failed: ' + error.message);
+        }
+
+        showToast(`✅ Saved ${payload.length} customers`);
+        const { data, error: refErr } = await supabase
+          .from('profiles')
+          .select('id, email, first_name, last_name, company_name, is_admin, is_active')
+          .order('email', { ascending: true });
+        if (!refErr) setRows(data || []);
+      };
+
+      const addCustomer = async () => {
+        if (!newUser.email || !newUser.email.includes('@')) {
+          return alert('Enter a valid email');
+        }
+        setAdding(true);
+        const payload = {
+          email: newUser.email.trim().toLowerCase(),
+          first_name: newUser.first_name || null,
+          last_name: newUser.last_name || null,
+          company_name: newUser.company_name || null,
+          is_admin: !!newUser.is_admin,
+          is_active: !!newUser.is_active
+        };
+        const { data, error } = await supabase.from('profiles').upsert([payload], { onConflict: 'email' }).select('*');
+        setAdding(false);
+        if (error) {
+          console.error(error);
+          return alert('Save failed: ' + error.message);
+        }
+        showToast('✅ Customer saved');
+        setNewUser({ email: '', first_name: '', last_name: '', company_name: '', is_admin: false, is_active: true });
+        setRows(prev => {
+          const m = new Map(prev.map(r => [r.email, r]));
+          data.forEach(d => m.set(d.email, d));
+          return Array.from(m.values()).sort((a,b)=>a.email.localeCompare(b.email));
+        });
+      };
+
+      const updateField = (id, key, value) => {
+        setRows(prev => prev.map(r => r.id === id ? { ...r, [key]: value } : r));
+      };
+
+      const saveRow = async (row) => {
+        const payload = {
+          id: row.id,
+          email: row.email?.trim().toLowerCase(),
+          first_name: row.first_name || null,
+          last_name: row.last_name || null,
+          company_name: row.company_name || null,
+          is_admin: !!row.is_admin,
+          is_active: !!row.is_active
+        };
+        const { error } = await supabase.from('profiles').update(payload).eq('id', row.id);
+        if (error) {
+          console.error(error);
+          alert('Update failed: ' + error.message);
+        } else {
+          showToast('✅ Saved');
+        }
+      };
+
+      const deleteRow = async (id) => {
+        if (!confirm('Delete this customer?')) return;
+        const { error } = await supabase.from('profiles').delete().eq('id', id);
+        if (error) {
+          console.error(error);
+          return alert('Delete failed: ' + error.message);
+        }
+        setRows(prev => prev.filter(r => r.id !== id));
+        showToast('🗑️ Deleted');
+      };
+
+      return (
+        <div className="space-y-6">
+          {/* Upload CSV */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Upload Authorized Customers (CSV)</h3>
+            <p className="text-sm text-gray-600 mb-4">
+              Required headers: <code>email, first_name, last_name, company_name, is_admin, is_active</code>
+            </p>
+            <label className="inline-flex items-center justify-center gap-2 bg-teal-600 text-white py-2 px-4 rounded-lg cursor-pointer hover:bg-teal-700">
+              <Upload size={18} />
+              <span>Choose CSV File</span>
+              <input type="file" accept=".csv" onChange={handleCustomersCsvUpload} className="hidden" />
+            </label>
+          </div>
+
+          {/* Add single customer */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Add Customer</h3>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              <input className="border rounded px-3 py-2" placeholder="Email *" value={newUser.email}
+                    onChange={e=>setNewUser({...newUser, email: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="First name" value={newUser.first_name}
+                    onChange={e=>setNewUser({...newUser, first_name: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="Last name" value={newUser.last_name}
+                    onChange={e=>setNewUser({...newUser, last_name: e.target.value})}/>
+              <input className="border rounded px-3 py-2" placeholder="Company" value={newUser.company_name}
+                    onChange={e=>setNewUser({...newUser, company_name: e.target.value})}/>
+              <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={newUser.is_admin}
+                        onChange={e=>setNewUser({...newUser, is_admin: e.target.checked})}/>
+                  Admin
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={newUser.is_active}
+                        onChange={e=>setNewUser({...newUser, is_active: e.target.checked})}/>
+                  Active
+                </label>
+              </div>
+            </div>
+            <button
+              onClick={addCustomer}
+              disabled={adding}
+              className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
+              {adding ? 'Saving…' : 'Add / Update'}
+            </button>
+          </div>
+
+          {/* Table */}
+          <div className="bg-white rounded-lg shadow p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">Authorized Customers</h3>
+
+            {loading ? (
+              <p className="text-gray-500">Loading…</p>
+            ) : rows.length === 0 ? (
+              <p className="text-gray-500">No customers yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-teal-600 text-white">
+                    <tr>
+                      <th className="px-3 py-2 text-left">Email</th>
+                      <th className="px-3 py-2 text-left">First</th>
+                      <th className="px-3 py-2 text-left">Last</th>
+                      <th className="px-3 py-2 text-left">Company</th>
+                      <th className="px-3 py-2 text-center">Admin</th>
+                      <th className="px-3 py-2 text-center">Active</th>
+                      <th className="px-3 py-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {rows.map(r => (
+                      <tr key={r.id}>
+                        <td className="px-3 py-2">
+                          <input
+                            className="border rounded px-2 py-1 w-full"
+                            value={r.email || ''}
+                            onChange={e=>updateField(r.id, 'email', e.target.value)}
+                            onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.first_name || ''}
+                                onChange={e=>updateField(r.id, 'first_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.last_name || ''}
+                                onChange={e=>updateField(r.id, 'last_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2">
+                          <input className="border rounded px-2 py-1 w-full"
+                                value={r.company_name || ''}
+                                onChange={e=>updateField(r.id, 'company_name', e.target.value)}
+                                onBlur={()=>saveRow(rows.find(x=>x.id===r.id))}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <input type="checkbox"
+                                checked={!!r.is_admin}
+                                onChange={e=>{
+                                  updateField(r.id, 'is_admin', e.target.checked);
+                                  saveRow({ ...r, is_admin: e.target.checked });
+                                }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-center">
+                          <input type="checkbox"
+                                checked={!!r.is_active}
+                                onChange={e=>{
+                                  updateField(r.id, 'is_active', e.target.checked);
+                                  saveRow({ ...r, is_active: e.target.checked });
+                                }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <button onClick={()=>deleteRow(r.id)} className="text-red-600 hover:text-red-800">
+                            <Trash2 size={18} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    };
+
     // Admin render
     return (
       <div className="min-h-screen bg-gray-50">
@@ -844,26 +1115,32 @@ const LoginPage = () => {
         </header>
 
         <div className="container mx-auto px-4 py-6">
-          <div className="flex gap-2 mb-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mb-6">
             <button
               onClick={() => setActiveTab('orders')}
-              className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
                 activeTab === 'orders' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
               }`}>
               <Package size={20} /> Orders
             </button>
             <button
               onClick={() => setActiveTab('products')}
-              className={`flex-1 py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
                 activeTab === 'products' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
               }`}>
               <Upload size={20} /> Products
             </button>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`py-3 rounded-lg font-medium flex items-center justify-center gap-2 ${
+                activeTab === 'customers' ? 'bg-teal-600 text-white' : 'bg-white text-gray-700'
+              }`}>
+              <Users size={20} /> Customers
+            </button>
           </div>
 
-          {activeTab === 'orders' ? (
-            <OrdersPanel orders={orders} />
-          ) : (
+          {activeTab === 'orders' && <OrdersPanel orders={orders} />}
+          {activeTab === 'products' && (
             <>
               <h2 className="text-2xl font-bold text-gray-800 mb-4">Product Database Management</h2>
 
@@ -915,6 +1192,7 @@ const LoginPage = () => {
               )}
             </>
           )}
+          {activeTab === 'customers' && <CustomersPanel />}
         </div>
       </div>
     );
