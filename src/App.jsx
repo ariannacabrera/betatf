@@ -54,24 +54,6 @@ function downloadTextFile(filename, text) {
 }
 
 /* =========================
-   Demo/Admin credentials
-   ========================= */
-const ADMIN_USERNAME = "admin";
-const ADMIN_PASSWORD = "admin123";
-
-// Turn off later
-const TEST_MODE = true;
-
-const CUSTOMER_EMAIL = "test@test.com";
-const CUSTOMER_PASSWORD = "tany";
-
-const CUSTOMER_DEMO_PROFILE = {
-  first_name: "Customer",
-  last_name: "Demo",
-  company_name: "Tany Demo Co",
-};
-
-/* =========================
    Tiny toast helper
    ========================= */
 function showToast(message) {
