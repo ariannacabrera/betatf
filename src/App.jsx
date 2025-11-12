@@ -355,15 +355,32 @@ const TanyFoodsApp = () => {
   };
 
   /* ------------- Filters ------------- */
-  const filteredProducts = products.filter(p => {
-    const matchesSearch =
-      searchQuery === '' ||
-      p.item_code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      p.description?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === 'All' || p.category === selectedCategory;
-    return matchesSearch && matchesCategory;
-  });
-  const categories = ['All', ...new Set(products.map(p => p.category || 'Uncategorized'))];
+// ---- Derived lists (memoized to avoid unnecessary re-renders) ----
+  const filteredProducts = useMemo(() => {
+    const q = (searchQuery || '').toLowerCase().trim();
+  
+    return (products || []).filter((p) => {
+      const code = (p.item_code || '').toLowerCase();
+      const desc = (p.description || '').toLowerCase();
+      const brand = (p.brand || '').toLowerCase();
+      const cat  = p.category || 'Uncategorized';
+  
+      const matchesSearch =
+        q === '' ||
+        code.includes(q) ||
+        desc.includes(q) ||
+        brand.includes(q);   // <— brand search added
+  
+      const matchesCategory =
+        selectedCategory === 'All' || cat === selectedCategory;
+  
+      return matchesSearch && matchesCategory;
+    });
+  }, [products, searchQuery, selectedCategory]);
+  
+  const categories = useMemo(() => (
+    ['All', ...new Set((products || []).map(p => p.category || 'Uncategorized'))]
+  ), [products]);
 
   /* ------------- Pages ------------- */
   const LoginPage = () => {
@@ -477,7 +494,7 @@ const TanyFoodsApp = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
               <input
                 type="text"
-                placeholder="Search by item code or description..."
+                placeholder="Search by item code or description, or brand..."
                 className="w-full pl-10 pr-4 py-2 rounded-lg text-gray-800"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -516,7 +533,7 @@ const TanyFoodsApp = () => {
           </div>
         ) : (
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-            {filteredProducts.map((product, idx) => (<ProductCard key={idx} product={product} />))}
+            {filteredProducts.map((product) => (<ProductCard key={product.item_code || product.description} product={product} />))}
           </div>
         )}
       </main>
