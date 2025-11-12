@@ -262,14 +262,16 @@ const CatalogPage = ({
             </select>
           </div>
         )}
-        <div className="grid grid-cols-2 gap-2 mt-3">
-          <button onClick={() => setCurrentPage('cart')}
-            className="bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
-            <ShoppingCart size={20} /> View Cart ({Object.keys(cart).length})
-          </button>
-          <button onClick={() => setCurrentPage('order_history')}
-            className="bg-white text-teal-700 py-2 rounded-lg font-medium hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
-            <History size={18} /> Order History
+        <div className="grid grid-cols-2 gap-2 mt-3">
+          <button onClick={() => setCurrentPage('order_history')}
+            className="bg-white text-teal-700 py-2 rounded-lg font-medium hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
+            <History size={18} /> Order History
+          </button>
+          <button onClick={() => setCurrentPage('cart')}
+            className="bg-amber-500 text-white py-2 rounded-lg font-medium hover:bg-amber-600 flex items-center justify-center gap-2">
+            <ShoppingCart size={20} /> View Cart ({Object.keys(cart).length})
+          </button>
+        </div>
           </button>
         </div>
       </div>
