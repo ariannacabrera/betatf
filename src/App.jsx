@@ -298,6 +298,7 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
+/* ------------- Product Detail Page ------------- */
 const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart }) => {
   const [selectedUom, setSelectedUom] = useState('Case');
   const [quantity, setQuantity] = useState(1);
@@ -324,10 +325,18 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
   if (selectedProduct.allow_case) uomOptions.push('Case');
   if (selectedProduct.allow_each) uomOptions.push('Each');
 
-  // --- Stock message logic (no qty shown) ---
+  // --- Stock message logic (reads from Supabase field `qty_available`) ---
   const qtyAvailable = Number(selectedProduct.qty_available ?? 0);
   const stockMessage =
     qtyAvailable === 0 ? 'Out of Stock' : qtyAvailable > 5 ? 'In Stock' : 'Low Stock';
+
+  // Extra disclaimer text for low/out of stock
+  const disclaimer =
+    qtyAvailable === 0
+      ? "Out of stock — we'll confirm availability and we can't guarantee delivery."
+      : qtyAvailable < 5
+      ? "Low stock — availability not guaranteed; we'll confirm after you place the order."
+      : '';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -411,8 +420,12 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Quantity
                   </label>
-                  {/* Stock message only (no qty number displayed) */}
-                  <p className="text-xs text-gray-600 mb-2">{stockMessage}</p>
+
+                  {/* Stock messaging (no qty number exposed) */}
+                  <p className="text-xs text-gray-600 mb-1">{stockMessage}</p>
+                  {disclaimer && (
+                    <p className="text-xs text-gray-500 mb-2">{disclaimer}</p>
+                  )}
 
                   <div className="flex items-center gap-2">
                     <button
