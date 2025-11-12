@@ -764,7 +764,7 @@ const AdminOrdersPanel = ({ orders }) => {
                           <span className="font-semibold text-gray-800">{o.customer_name}</span></p>
                         <p><span className="text-sm text-gray-600">Company</span><br />
                           <span className="font-semibold text-gray-800">{o.company_name}</span></p>
-t                       <p><span className="text-sm text-gray-600">Email</span><br />
+                        <p><span className="text-sm text-gray-600">Email</span><br />
                           <span className="font-semibold text-gray-800">{o.email}</span></p>
                         <p><span className="text-sm text-gray-600">Total Items</span><br />
                           <span className="font-semibold text-gray-800">{itemCount}</span></p>
@@ -1028,7 +1028,7 @@ const AdminCustomersPanel = () => {
                       />
                     </td>
                     <td className="px-3 py-2">
-s                     <input className="border rounded px-2 py-1 w-full"
+                      <input className="border rounded px-2 py-1 w-full"
                         value={r.last_name || ''}
                         onChange={e => updateField(r.id, 'last_name', e.target.value)}
                         onBlur={() => saveRow(rows.find(x => x.id === r.id))}
@@ -1039,7 +1039,7 @@ s                     <input className="border rounded px-2 py-1 w-ful
                         value={r.company_name || ''}
                         onChange={e => updateField(r.id, 'company_name', e.target.value)}
                         onBlur={() => saveRow(rows.find(x => x.id === r.id))}
-s                     />
+                      />
                     </td>
                      <td className="px-3 py-2 text-center">
                       <input type="checkbox"
@@ -1053,16 +1053,16 @@ s                     />
                     <td className="px-3 py-2 text-center">
                       <input type="checkbox"
                         checked={!!r.is_active}
-s                       onChange={e => {
+                        onChange={e => {
                           updateField(r.id, 'is_active', e.target.checked);
                           saveRow({ ...r, is_active: e.target.checked });
                         }}
                       />
-A                   </td>
+                    </td>
                     <td className="px-3 py-2 text-right">
                       <button onClick={() => deleteRow(r.id)} className="text-red-600 hover:text-red-800">
                         <Trash2 size={18} />
-              s       </button>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1071,7 +1071,7 @@ A                   </td>
           </div>
         )}
       </div>
-A   </div>
+    </div>
   );
 };
 
@@ -1176,7 +1176,7 @@ const AdminDashboard = ({ handleLogout, orders, products, setProducts }) => {
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Upload Product Database (CSV)</h3>
               <p className="text-sm text-gray-600 mb-4">
                 Required columns: item_code, description, brand, category, allow_case, allow_each, image_url
-s             </p>
+              </p>
               <label className="flex items-center justify-center gap-2 bg-teal-600 text-white py-3 px-6 rounded-lg cursor-pointer hover:bg-teal-700 transition-colors">
                 <Upload size={20} />
                 <span>Choose CSV File</span>
@@ -1539,7 +1539,7 @@ const TanyFoodsApp = () => {
   if (currentPage === 'cart') {
     return <CartPage
       cart={cart}
-  S   setCurrentPage={setCurrentPage}
+      setCurrentPage={setCurrentPage}
       updateCartQuantity={updateCartQuantity}
       removeFromCart={removeFromCart}
       showOrderConfirmation={showOrderConfirmation}
