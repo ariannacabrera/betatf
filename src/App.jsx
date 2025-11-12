@@ -298,115 +298,213 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
-/* ------------- Product Detail ------------- */
-const ProductDetail = ({
-  product,
-  onBack,
-  onAddToCart, // function({ product, quantity, uom })
-}) => {
-  const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/800x600';
-  const qtyAvailable = Number.isFinite(product.qty_available) ? Number(product.qty_available) : 0;
+/* ------------- Product Detail Page ------------- */
+const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart }) => {
+  const [selectedUom, setSelectedUom] = useState('Case');
+  const [quantity, setQuantity] = useState(1);
 
-  // If you support UOM switching (e.g., 'CASE'/'EACH'), wire it here:
-  const uomOptions = product.uom_options || [product.uom || 'EACH'];
-  const [uom, setUom] = React.useState(uomOptions[0]);
-  const [qty, setQty] = React.useState(1);
+  if (!selectedProduct) return null;
 
-  const isOutOfStock = qtyAvailable === 0;
-  const isLowStock = !isOutOfStock && qtyAvailable < 5;
+  // Set default UOM based on product
+  useEffect(() => {
+    if (selectedProduct) {
+      if (selectedProduct.allow_case) {
+        setSelectedUom('Case');
+      } else if (selectedProduct.allow_each) {
+        setSelectedUom('Each');
+      }
+    }
+  }, [selectedProduct]);
 
-  const exceedsStock = qty > qtyAvailable;
-  const canAdd = !isOutOfStock && !exceedsStock && qty > 0;
+  const imgSrc =
+    selectedProduct.image_url ||
+    selectedProduct.image_path ||
+    'https://via.placeholder.com/600x400';
 
-  const handleAdd = () => {
-    if (!canAdd) return;
-    onAddToCart?.({ product, quantity: qty, uom });
-  };
+  const uomOptions = [];
+  if (selectedProduct.allow_case) uomOptions.push('Case');
+  if (selectedProduct.allow_each) uomOptions.push('Each');
+
+  // --- STOCK GUARDS (no layout changes) ---
+  const maxAvail = Number(selectedProduct.qty_available ?? 0);
+  const qtyNum = parseInt(quantity, 10) || 0;
+  const outOfStock = maxAvail <= 0;
+  const exceeds = qtyNum > maxAvail;
 
   return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden">
-      <div className="flex items-center gap-4 p-4 border-b">
-        <button onClick={onBack} className="text-sm text-gray-600 hover:text-gray-800">&larr; Back to catalog</button>
-      </div>
-
-      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-gray-100 rounded-lg h-80 flex items-center justify-center p-6">
-          <img src={imgSrc} alt={product.description} className="max-h-full max-w-full object-contain" />
-        </div>
-
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{product.description}</h1>
-          <p className="text-sm text-gray-500 mt-1">{product.item_code}</p>
-
-          <div className="mt-4">
-            <div className="inline-flex items-center gap-2 text-sm">
-              <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
-                {isOutOfStock ? 'Out of Stock' : `${qtyAvailable} available`}
-              </span>
-              {isLowStock && (
-                <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">
-                  Low stock
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 space-y-4">
-            {/* UOM selector (optional) */}
-            {uomOptions.length > 1 && (
-              <div className="flex items-center gap-2">
-                <label className="text-sm text-gray-700 w-24">Unit</label>
-                <select
-                  className="border rounded px-3 py-2 text-sm w-40"
-                  value={uom}
-                  onChange={(e) => setUom(e.target.value)}
-                  disabled={isOutOfStock}
-                >
-                  {uomOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                </select>
-              </div>
-            )}
-
-            {/* Qty input with guardrail */}
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-gray-700 w-24">Quantity</label>
-              <input
-                type="number"
-                min={1}
-                step={1}
-                value={qty}
-                onChange={(e) => {
-                  const v = Math.max(1, Number(e.target.value || 1));
-                  setQty(v);
-                }}
-                className="border rounded px-3 py-2 text-sm w-40"
-                disabled={isOutOfStock}
-              />
-            </div>
-
-            {/* Validation messages */}
-            {!isOutOfStock && exceedsStock && (
-              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-                Only {qtyAvailable} left in stock. Please reduce the quantity.
-              </div>
-            )}
-          </div>
-
-          <div className="mt-6">
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex gap-2">
             <button
-              onClick={handleAdd}
-              disabled={!canAdd}
-              className={`w-full py-3 rounded-lg text-sm font-medium
-                ${canAdd ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'}`}
+              onClick={() => setCurrentPage('catalog')}
+              className="flex-1 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2"
             >
-              {isOutOfStock ? 'Out of Stock' : exceedsStock ? 'Not Enough Stock' : 'Add to Cart'}
+              <ChevronLeft size={20} /> Back to Catalog
+            </button>
+            <button
+              onClick={() => setCurrentPage('cart')}
+              className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
             </button>
           </div>
         </div>
-      </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 max-w-2xl">
+        <div className="bg-white rounded-lg shadow-lg p-6">
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">
+            {selectedProduct.description}
+          </h1>
+          <p className="text-gray-500 mb-4">{selectedProduct.item_code}</p>
+
+          <div className="h-56 bg-gray-100 rounded-lg flex items-center justify-center mb-6">
+            <img
+              src={imgSrc}
+              alt={selectedProduct.description}
+              className="max-h-full max-w-full object-contain"
+            />
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm text-gray-600">
+                Category:{' '}
+                <span className="font-medium text-gray-800">
+                  {selectedProduct.category || 'N/A'}
+                </span>
+              </p>
+              {selectedProduct.brand && (
+                <p className="text-sm text-gray-600">
+                  Brand:{' '}
+                  <span className="font-medium text-gray-800">
+                    {selectedProduct.brand}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            {uomOptions.length > 0 ? (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Unit of Measure
+                  </label>
+                  <div className="flex gap-2">
+                    {uomOptions.map((uom) => (
+                      <button
+                        key={uom}
+                        onClick={() => setSelectedUom(uom)}
+                        className={`flex-1 py-2 rounded-lg font-medium ${
+                          selectedUom === uom
+                            ? 'bg-teal-600 text-white'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                      >
+                        {uom}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* --- Quantity picker with + / - and safe typing --- */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quantity
+                  </label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantity((q) => Math.max(1, Number(q) - 1))
+                      }
+                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                      aria-label="Decrease quantity"
+                    >
+                      −
+                    </button>
+
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={String(quantity)}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        if (v === '') return setQuantity('');
+                        if (/^\d+$/.test(v)) {
+                          const n = parseInt(v, 10);
+                          const clamped = Math.min(
+                            Math.max(1, n),
+                            Math.max(1, maxAvail || 1)
+                          );
+                          setQuantity(clamped);
+                        }
+                      }}
+                      onBlur={() => {
+                        const n = parseInt(quantity, 10);
+                        const clamped = Math.min(
+                          Math.max(1, Number.isFinite(n) ? n : 1),
+                          Math.max(1, maxAvail || 1)
+                        );
+                        setQuantity(clamped);
+                      }}
+                      className="w-20 text-center px-2 py-2 border border-gray-300 rounded"
+                    />
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantity((q) =>
+                          Math.max(
+                            1,
+                            Math.min(Number(q) + 1, Math.max(1, maxAvail || 1))
+                          )
+                        )
+                      }
+                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => {
+                    const n = parseInt(quantity, 10);
+                    const safeQty = Number.isFinite(n) && n > 0
+                      ? Math.min(n, maxAvail || 1)
+                      : 1;
+                    addToCart(selectedProduct, selectedUom, safeQty);
+                    setCurrentPage('catalog');
+                  }}
+                  disabled={outOfStock || exceeds}
+                  className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2"
+                  title={
+                    outOfStock
+                      ? 'Out of stock'
+                      : exceeds
+                      ? `Only ${maxAvail} available`
+                      : undefined
+                  }
+                >
+                  <ShoppingCart size={20} /> Add to Cart
+                </button>
+              </>
+            ) : (
+              <p className="text-red-600 text-center">
+                This product is not available for purchase.
+              </p>
+            )}
+          </div>
+        </div>
+      </main>
     </div>
   );
 };
+
 
 /* ------------- Cart Page ------------- */
 const CartPage = ({
