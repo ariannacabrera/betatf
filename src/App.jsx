@@ -190,39 +190,24 @@ const LoginPage = ({ tryCustomerLogin, handleAdminLogin }) => {
 };
 
 /* ------------- Product Card (for Catalog) ------------- */
-/* ------------- Product Card (for Catalog) ------------- */
 const ProductCard = ({ product, setSelectedProduct, setCurrentPage }) => {
-  const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/600x400';
-  const qty = product.qty_available ?? 0;
-  const isOutOfStock = qty === 0;
-  const isLowStock = qty > 0 && qty < 5;
-  
-  return (
-    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
-      <div className="h-40 bg-gray-100 flex items-center justify-center p-4 relative">
-        <img src={imgSrc} alt={product.description} className="max-h-full max-w-full object-contain" />
-        {isOutOfStock && (
-          <div className="absolute top-2 right-2 bg-red-600 text-white text-xs px-2 py-1 rounded">
-            Out of Stock
-          </div>
-        )}
-        {isLowStock && (
-          <div className="absolute top-2 right-2 bg-amber-500 text-white text-xs px-2 py-1 rounded">
-            Low Stock
-          </div>
-        )}
-      </div>
-      <div className="p-4">
-        <h3 className="font-semibold text-gray-800 text-sm mb-1 line-clamp-2 h-10">{product.description}</h3>
-        <p className="text-xs text-gray-500 mb-3">{product.item_code}</p>
-        <button
-          onClick={() => { setSelectedProduct(product); setCurrentPage('product_detail'); }}
-          className="w-full bg-teal-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-teal-700">
-          View Details
-        </button>
-      </div>
-    </div>
-  );
+  const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/600x400';
+  return (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
+      <div className="h-40 bg-gray-100 flex items-center justify-center p-4">
+        <img src={imgSrc} alt={product.description} className="max-h-full max-w-full object-contain" />
+      </div>
+      <div className="p-4">
+        <h3 className="font-semibold text-gray-800 text-sm mb-1 line-clamp-2 h-10">{product.description}</h3>
+        <p className="text-xs text-gray-500 mb-3">{product.item_code}</p>
+        <button
+          onClick={() => { setSelectedProduct(product); setCurrentPage('product_detail'); }}
+          className="w-full bg-teal-600 text-white py-2 rounded-lg text-sm font-medium hover:bg-teal-700">
+          View Details
+        </button>
+      </div>
+    </div>
+  );
 };
 
 /* ------------- Catalog Page ------------- */
