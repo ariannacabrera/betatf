@@ -298,7 +298,8 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
-const AVAILABLE_THRESHOLD = 5; // >5 cs = "Available"
+/* ------------- Product Detail (only low/no stock messages + Available >5) ------------- */
+const AVAILABLE_THRESHOLD = 5;
 
 const ProductDetail = ({ product, onBack, onAddToCart }) => {
   const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/800x600';
@@ -309,13 +310,12 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
   const [qty, setQty] = React.useState(1);
 
   const isOutOfStock = qtyAvailable === 0;
-  const isLowStock = qtyAvailable > 0 && qtyAvailable <= AVAILABLE_THRESHOLD;
-  const isAvailable = qtyAvailable > AVAILABLE_THRESHOLD;
+  const isLowStock = !isOutOfStock && qtyAvailable <= AVAILABLE_THRESHOLD;
 
-  const handleAdd = () => onAddToCart?.({ product, quantity: qty, uom });
-
-  // optional: show "cs" explicitly; change to "ea" if your qty_available is EACH
-  const stockUnit = 'cs';
+  const handleAdd = () => {
+    // Informational only — never block
+    onAddToCart?.({ product, quantity: qty, uom });
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
@@ -334,31 +334,29 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
           <h1 className="text-lg font-semibold text-gray-900">{product.description}</h1>
           <p className="text-sm text-gray-500 mt-1">{product.item_code}</p>
 
-          {/* Status + count chips */}
-          <div className="mt-4 flex items-center gap-2 text-sm">
-            {isAvailable && (
-              <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800">Available</span>
-            )}
-            {isLowStock && (
+          {/* Stock chips */}
+          <div className="mt-4 inline-flex items-center gap-2 text-sm">
+            <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
+              {isOutOfStock
+                ? 'Out of Stock'
+                : isLowStock
+                  ? `${qtyAvailable} available`
+                  : 'Available'}
+            </span>
+            {isLowStock && !isOutOfStock && (
               <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">Low stock</span>
             )}
-            {isOutOfStock && (
-              <span className="px-2 py-1 rounded bg-red-100 text-red-800">Out of stock</span>
-            )}
-            <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
-              {qtyAvailable} {stockUnit}
-            </span>
           </div>
 
-          {/* Info banners (only low or no stock) */}
-          {isLowStock && (
+          {/* Informational banners (only low or no stock) */}
+          {isLowStock && !isOutOfStock && (
             <div className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
               Heads up: inventory is low. We can’t guarantee delivery if demand exceeds remaining stock.
             </div>
           )}
           {isOutOfStock && (
             <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-              Currently showing as out of stock. You can still place the order; fulfillment isn’t guaranteed.
+              Currently showing as out of stock. You can still place the order; fulfillment is not guaranteed.
             </div>
           )}
 
@@ -376,6 +374,7 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
                 </select>
               </div>
             )}
+
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-700 w-24">Quantity</label>
               <input
