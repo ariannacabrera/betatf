@@ -642,7 +642,11 @@ const TanyFoodsApp = () => {
     );
   };
 
-  const CartPage = () => (
+  const CartPage = () => {
+    // Local state for quantity editing to prevent focus loss.
+    const [editingQty, setEditingQty] = useState({});
+
+    return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
         <div className="container mx-auto px-4 py-4">
@@ -682,7 +686,10 @@ const TanyFoodsApp = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {Object.entries(cart).map(([key, item]) => (
+                    {Object.entries(cart).map(([key, item]) => {
+                      const displayValue = editingQty[key] !== undefined ? editingQty[key] : String(item.quantity);
+                      
+                      return (
                       <tr key={key}>
                         <td className="px-4 py-3 text-sm font-medium">{item.item_code}</td>
                         <td className="px-4 py-3 text-sm">{item.description}</td>
@@ -693,18 +700,21 @@ const TanyFoodsApp = () => {
                             type="text"
                             inputMode="numeric"
                             pattern="[0-9]*"
-                            value={String(item.quantity)}
+                            value={displayValue}
                             onChange={(e) => {
                               const v = e.target.value;
-                              if (v === '') return updateCartQuantity(key, 1);
-                              if (/^\d+$/.test(v)) {
-                                const n = parseInt(v, 10);
-                                updateCartQuantity(key, Math.max(1, n));
-                              }
+                              setEditingQty(prev => ({ ...prev, [key]: v }));
                             }}
-                            onBlur={(e) => {
-                              const n = parseInt(e.target.value, 10);
-                              updateCartQuantity(key, (!Number.isFinite(n) || n < 1) ? 1 : n);
+                            onBlur={() => {
+                              const v = editingQty[key];
+                              const n = v ? parseInt(v, 10) : item.quantity;
+                              const finalQty = (!Number.isFinite(n) || n < 1) ? 1 : n;
+                              updateCartQuantity(key, finalQty);
+                              setEditingQty(prev => {
+                                const next = { ...prev };
+                                delete next[key];
+                                return next;
+                              });
                             }}
                             className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
                           />
@@ -715,7 +725,7 @@ const TanyFoodsApp = () => {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    )})}
                   </tbody>
                 </table>
               </div>
