@@ -333,7 +333,7 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
 
   if (qtyAvailable === 0) {
     // single combined line only
-    stockLine = "Out of stock — we'll confirm availability and we can't guarantee delivery.";
+    stockLine = "Out of stock — we'll confirm availability but we can't guarantee delivery.";
   } else if (qtyAvailable < 5) {
     stockLine = 'Low Stock';
     disclaimer = "Availability not guaranteed; we'll confirm after you place the order.";
