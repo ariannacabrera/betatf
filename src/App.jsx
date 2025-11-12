@@ -495,9 +495,10 @@ const TanyFoodsApp = () => {
               <input
                 type="text"
                 placeholder="Search by item code or description, or brand..."
-                className="w-full pl-10 pr-4 py-2 rounded-lg text-gray-800"
+                className="w-full pl-10 pr-4 py-2 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-300"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                autoComplete="off"
               />
             </div>
             <button onClick={() => setShowFilters(!showFilters)} className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center gap-2">
