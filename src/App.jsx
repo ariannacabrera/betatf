@@ -6,33 +6,35 @@ import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upl
    CSV helpers (no deps)
    ========================= */
 function ordersToCSV(orders) {
-  const rows = [];
-  rows.push([
-    'order_id','timestamp','customer_name','company_name','email',
-    'item_code','description','brand','uom','quantity'
-  ].join(','));
+  const rows = [];
+  rows.push([
+    'order_number','timestamp','customer_name','company_name','email',
+    'item_code','description','brand','uom','quantity'
+  ].join(','));
 
-  orders.forEach(o => {
-    const base = [
-      csv(o.order_id),
-      csv(o.timestamp),
-      csv(o.customer_name),
-      csv(o.company_name),
-      csv(o.email),
-    ];
-    (o.items || []).forEach(it => {
-      rows.push([
-        ...base,
-        csv(it.item_code),
-        csv(it.description),
-        csv(it.brand ?? ''),
-        csv(it.uom),
-        it.quantity ?? ''
-      ].join(','));
-    });
-  });
+  orders.forEach(o => {
+    const base = [
+      csv(o.order_number || o.order_id), // prefer order_number in exports too
+      csv(o.timestamp),
+      csv(o.customer_name),
+      csv(o.company_name),
+      csv(o.email),
+    ];
+    (o.items || []).forEach(it => {
+      rows.push([
+        ...base,
+        csv(it.item_code),
+        csv(it.description),
+        csv(it.brand ?? ''),
+        csv(it.uom),
+        it.quantity ?? ''
+      ].join(','));
+    });
+  });
 
-  return rows.join('\n');
+  return rows.join('\n');
+  // csv() stays the same
+}
 
   function csv(v) {
     const s = String(v ?? '');
