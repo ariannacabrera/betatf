@@ -325,12 +325,6 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
   if (selectedProduct.allow_case) uomOptions.push('Case');
   if (selectedProduct.allow_each) uomOptions.push('Each');
 
-  // --- STOCK GUARDS (no layout changes) ---
-  const maxAvail = Number(selectedProduct.qty_available ?? 0);
-  const qtyNum = parseInt(quantity, 10) || 0;
-  const outOfStock = maxAvail <= 0;
-  const exceeds = qtyNum > maxAvail;
-
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
@@ -416,15 +410,12 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() =>
-                        setQuantity((q) => Math.max(1, Number(q) - 1))
-                      }
+                      onClick={() => setQuantity((q) => Math.max(1, Number(q) - 1))}
                       className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
                       aria-label="Decrease quantity"
                     >
                       −
                     </button>
-
                     <input
                       type="text"
                       inputMode="numeric"
@@ -435,34 +426,18 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                         if (v === '') return setQuantity('');
                         if (/^\d+$/.test(v)) {
                           const n = parseInt(v, 10);
-                          const clamped = Math.min(
-                            Math.max(1, n),
-                            Math.max(1, maxAvail || 1)
-                          );
-                          setQuantity(clamped);
+                          setQuantity(Number.isFinite(n) ? Math.max(1, n) : 1);
                         }
                       }}
                       onBlur={() => {
                         const n = parseInt(quantity, 10);
-                        const clamped = Math.min(
-                          Math.max(1, Number.isFinite(n) ? n : 1),
-                          Math.max(1, maxAvail || 1)
-                        );
-                        setQuantity(clamped);
+                        if (!Number.isFinite(n) || n < 1) setQuantity(1);
                       }}
                       className="w-20 text-center px-2 py-2 border border-gray-300 rounded"
                     />
-
                     <button
                       type="button"
-                      onClick={() =>
-                        setQuantity((q) =>
-                          Math.max(
-                            1,
-                            Math.min(Number(q) + 1, Math.max(1, maxAvail || 1))
-                          )
-                        )
-                      }
+                      onClick={() => setQuantity((q) => Math.max(1, Number(q) + 1))}
                       className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
                       aria-label="Increase quantity"
                     >
@@ -474,21 +449,11 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                 <button
                   onClick={() => {
                     const n = parseInt(quantity, 10);
-                    const safeQty = Number.isFinite(n) && n > 0
-                      ? Math.min(n, maxAvail || 1)
-                      : 1;
+                    const safeQty = Number.isFinite(n) && n > 0 ? n : 1;
                     addToCart(selectedProduct, selectedUom, safeQty);
                     setCurrentPage('catalog');
                   }}
-                  disabled={outOfStock || exceeds}
                   className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2"
-                  title={
-                    outOfStock
-                      ? 'Out of stock'
-                      : exceeds
-                      ? `Only ${maxAvail} available`
-                      : undefined
-                  }
                 >
                   <ShoppingCart size={20} /> Add to Cart
                 </button>
@@ -504,7 +469,6 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
     </div>
   );
 };
-
 
 /* ------------- Cart Page ------------- */
 const CartPage = ({
