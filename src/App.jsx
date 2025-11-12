@@ -272,8 +272,6 @@ const CatalogPage = ({
             <ShoppingCart size={20} /> View Cart ({Object.keys(cart).length})
           </button>
         </div>
-          </button>
-        </div>
       </div>
     </header>
 
