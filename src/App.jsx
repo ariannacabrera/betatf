@@ -1577,10 +1577,11 @@ const TanyFoodsApp = () => {
     return null;
   }
   return (
-    <ProductDetail
-      product={selectedProduct}
-      onBack={() => setCurrentPage('catalog')}
-      onAddToCart={({ product, quantity, uom }) => addToCart(product, uom, quantity)}
+    <ProductDetailPage
+      selectedProduct={selectedProduct}
+      setCurrentPage={setCurrentPage}
+      cart={cart}
+      addToCart={addToCart}
     />
   );
 }
