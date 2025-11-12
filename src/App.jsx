@@ -244,7 +244,7 @@ const CatalogPage = ({
               type="text"
               placeholder="Search by item code or description, or brand..."
               className="w-full pl-10 pr-4 py-2 rounded-lg text-gray-800 focus:outline-none focus:ring-2 focus:ring-teal-300"
-s             value={searchQuery}
+              value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               autoComplete="off"
             />
@@ -403,9 +403,9 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                       aria-label="Increase quantity"
                     >
                       +
-                    </button>
+                  </button>
                   </div>
-          _     </div>
+                  </div>
 
                 <button onClick={() => {
                     const n = parseInt(quantity, 10);
@@ -616,7 +616,7 @@ const OrderHistoryPage = ({ orders, setCurrentPage, cart }) => {
                         <p>
                           <span className="text-sm text-gray-600">Company</span><br />
                           <span className="font-semibold text-gray-800">{o.company_name || '—'}</span>
-CON                   </p>
+                        </p>
                         <p>
                           <span className="text-sm text-gray-600">Email</span><br />
                           <span className="font-semibold text-gray-800">{o.email || '—'}</span>
@@ -646,7 +646,7 @@ CON                   </p>
                               <th className="text-left py-2">Description</th>
                               <th className="text-left py-2">Brand</th>
                               <th className="text-left py-2">UOM</th>
-s                             <th className="text-right py-2">Qty</th>
+                              <th className="text-right py-2">Qty</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -782,7 +782,7 @@ t                       <p><span className="text-sm text-gray-600">Em
                     <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
                       <table className="w-full text-sm">
                         <thead className="border-b border-gray-300">
-S                         <tr>
+                           <tr>
                             <th className="text-left py-2">Item Code</th>
                             <th className="text-left py-2">Description</th>
                             <th className="text-left py-2">Brand</th>
@@ -898,7 +898,7 @@ const AdminCustomersPanel = () => {
     if (error) {
       console.error(error);
       return alert('Save failed: ' + error.message);
-  s }
+    }
     showToast('✅ Customer saved');
     setNewUser({ email: '', first_name: '', last_name: '', company_name: '', is_admin: false, is_active: true });
     setRows(prev => {
@@ -979,7 +979,7 @@ const AdminCustomersPanel = () => {
               Active
             </label>
           </div>
-    t   </div>
+        </div>
         <button
           onClick={addCustomer}
           disabled={adding}
@@ -1001,7 +1001,7 @@ const AdminCustomersPanel = () => {
               <thead className="bg-teal-600 text-white">
                 <tr>
                   <th className="px-3 py-2 text-left">Email</th>
-t                 <th className="px-3 py-2 text-left">First</th>
+                  <th className="px-3 py-2 text-left">First</th>
                   <th className="px-3 py-2 text-left">Last</th>
                   <th className="px-3 py-2 text-left">Company</th>
                   <th className="px-3 py-2 text-center">Admin</th>
@@ -1041,7 +1041,7 @@ s                     <input className="border rounded px-2 py-1 w-ful
                         onBlur={() => saveRow(rows.find(x => x.id === r.id))}
 s                     />
                     </td>
-Note                 <td className="px-3 py-2 text-center">
+                     <td className="px-3 py-2 text-center">
                       <input type="checkbox"
                         checked={!!r.is_admin}
                         onChange={e => {
@@ -1102,7 +1102,7 @@ const AdminDashboard = ({ handleLogout, orders, products, setProducts }) => {
       if (p.allow_case !== undefined) p.allow_case = toBool(p.allow_case);
       if (p.allow_each !== undefined) p.allow_each = toBool(p.allow_each);
       if (p.image_url && !p.image_path) { p.image_path = p.image_url; delete p.image_url; }
-i     if (p.item_code) p.item_code = String(p.item_code).trim();
+      if (p.item_code) p.item_code = String(p.item_code).trim();
     });
 
     const { error: upsertErr } = await supabase
@@ -1196,20 +1196,20 @@ s             </p>
                         <th className="px-4 py-3 text-left">Item Code</th>
                         <th className="px-4 py-3 text-left">Description</th>
                         <th className="px-4 py-3 text-left">Category</th>
-s                       <th className="px-4 py-3 text-left">Brand</th>
+                        <th className="px-4 py-3 text-left">Brand</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {products.slice(0, 10).map((p, idx) => (
                         <tr key={idx}>
                           <td className="px-4 py-3">{p.item_code}</td>
-s                         <td className="px-4 py-3">{p.description}</td>
+                          <td className="px-4 py-3">{p.description}</td>
                           <td className="px-4 py-3">{p.category}</td>
                           <td className="px-4 py-3">{p.brand}</td>
-s                       </tr>
+                        </tr>
                       ))}
                     </tbody>
-s                 </table>
+                  </table>
                   {products.length > 10 && (
                     <p className="text-sm text-gray-500 mt-4 text-center">
                       Showing 10 of {products.length} products
@@ -1229,7 +1229,7 @@ s                 </table>
 
 
 /* ====================================================================
-s   MAIN APP COMPONENT
+    MAIN APP COMPONENT
    ==================================================================== */
 
 const TanyFoodsApp = () => {
@@ -1438,7 +1438,7 @@ const TanyFoodsApp = () => {
     const items = Object.values(cart).map(it => ({
       order_id: orderRow.id,
       item_code: it.item_code,
-s     uom: it.uom,
+      uom: it.uom,
       quantity: Number(it.quantity) || 1
     }));
 
@@ -1467,7 +1467,7 @@ s     uom: it.uom,
       timestamp: new Date(orderRow.placed_at).toLocaleString('en-US', { timeZone: 'America/Chicago' }),
       customer_name: orderRow.customer_name,
       company_name: orderRow.company_name,
-  t   email: orderRow.email,
+      email: orderRow.email,
       items: enrichedItems
     };
 
