@@ -298,7 +298,6 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
-/* ------------- Product Detail Page ------------- */
 const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart }) => {
   const [selectedUom, setSelectedUom] = useState('Case');
   const [quantity, setQuantity] = useState(1);
@@ -324,6 +323,11 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
   const uomOptions = [];
   if (selectedProduct.allow_case) uomOptions.push('Case');
   if (selectedProduct.allow_each) uomOptions.push('Each');
+
+  // --- Stock message logic (no qty shown) ---
+  const qtyAvailable = Number(selectedProduct.qty_available ?? 0);
+  const stockMessage =
+    qtyAvailable === 0 ? 'Out of Stock' : qtyAvailable > 5 ? 'In Stock' : 'Low Stock';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -407,6 +411,9 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Quantity
                   </label>
+                  {/* Stock message only (no qty number displayed) */}
+                  <p className="text-xs text-gray-600 mb-2">{stockMessage}</p>
+
                   <div className="flex items-center gap-2">
                     <button
                       type="button"
