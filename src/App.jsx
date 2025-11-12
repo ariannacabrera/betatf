@@ -1506,14 +1506,20 @@ const TanyFoodsApp = () => {
     />;
   }
 
-  if (currentPage === 'product_detail') {
-    return <ProductDetailPage
-      selectedProduct={selectedProduct}
-      setCurrentPage={setCurrentPage}
-      cart={cart}
-      addToCart={addToCart}
-    />;
-  }
+  if (currentPage === 'product_detail') {
+  // guard if user navigated here without a selected product
+  if (!selectedProduct) {
+    setCurrentPage('catalog');
+    return null;
+  }
+  return (
+    <ProductDetail
+      product={selectedProduct}
+      onBack={() => setCurrentPage('catalog')}
+      onAddToCart={({ product, quantity, uom }) => addToCart(product, uom, quantity)}
+    />
+  );
+}
 
   if (currentPage === 'cart') {
     return <CartPage
