@@ -327,199 +327,6 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
 
   // --- Stock message logic (reads from Supabase field `qty_available`) ---
   const qtyAvailable = Number(selectedProduct.qty_available ?? 0);
-  const stockMessage =
-    qtyAvailable === 0 ? 'Out of Stock' : qtyAvailable > 5 ? 'In Stock' : 'Low Stock';
-
-  // Extra disclaimer text for low/out of stock
-  const disclaimer =
-    qtyAvailable === 0
-      ? "Out of stock — we'll confirm availability and we can't guarantee delivery."
-      : qtyAvailable < 5
-      ? "Low stock — availability not guaranteed; we'll confirm after you place the order."
-      : '';
-
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setCurrentPage('catalog')}
-              className="flex-1 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2"
-            >
-              <ChevronLeft size={20} /> Back to Catalog
-            </button>
-            <button
-              onClick={() => setCurrentPage('cart')}
-              className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2"
-            >
-              <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="container mx-auto px-4 py-6 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">
-            {selectedProduct.description}
-          </h1>
-          <p className="text-gray-500 mb-4">{selectedProduct.item_code}</p>
-
-          <div className="h-56 bg-gray-100 rounded-lg flex items-center justify-center mb-6">
-            <img
-              src={imgSrc}
-              alt={selectedProduct.description}
-              className="max-h-full max-w-full object-contain"
-            />
-          </div>
-
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">
-                Category:{' '}
-                <span className="font-medium text-gray-800">
-                  {selectedProduct.category || 'N/A'}
-                </span>
-              </p>
-              {selectedProduct.brand && (
-                <p className="text-sm text-gray-600">
-                  Brand:{' '}
-                  <span className="font-medium text-gray-800">
-                    {selectedProduct.brand}
-                  </span>
-                </p>
-              )}
-            </div>
-
-            {uomOptions.length > 0 ? (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Unit of Measure
-                  </label>
-                  <div className="flex gap-2">
-                    {uomOptions.map((uom) => (
-                      <button
-                        key={uom}
-                        onClick={() => setSelectedUom(uom)}
-                        className={`flex-1 py-2 rounded-lg font-medium ${
-                          selectedUom === uom
-                            ? 'bg-teal-600 text-white'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                      >
-                        {uom}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* --- Quantity picker with + / - and safe typing --- */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Quantity
-                  </label>
-
-                  {/* Stock messaging (no qty number exposed) */}
-                  <p className="text-xs text-gray-600 mb-1">{stockMessage}</p>
-                  {disclaimer && (
-                    <p className="text-xs text-gray-500 mb-2">{disclaimer}</p>
-                  )}
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, Number(q) - 1))}
-                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                      aria-label="Decrease quantity"
-                    >
-                      −
-                    </button>
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={String(quantity)}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '') return setQuantity('');
-                        if (/^\d+$/.test(v)) {
-                          const n = parseInt(v, 10);
-                          setQuantity(Number.isFinite(n) ? Math.max(1, n) : 1);
-                        }
-                      }}
-                      onBlur={() => {
-                        const n = parseInt(quantity, 10);
-                        if (!Number.isFinite(n) || n < 1) setQuantity(1);
-                      }}
-                      className="w-20 text-center px-2 py-2 border border-gray-300 rounded"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setQuantity((q) => Math.max(1, Number(q) + 1))}
-                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                      aria-label="Increase quantity"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    const n = parseInt(quantity, 10);
-                    const safeQty = Number.isFinite(n) && n > 0 ? n : 1;
-                    addToCart(selectedProduct, selectedUom, safeQty);
-                    setCurrentPage('catalog');
-                  }}
-                  className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2"
-                >
-                  <ShoppingCart size={20} /> Add to Cart
-                </button>
-              </>
-            ) : (
-              <p className="text-red-600 text-center">
-                This product is not available for purchase.
-              </p>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
-  );
-};
-
-/* ------------- Cart Page ------------- */
-/* ------------- Product Detail Page ------------- */
-const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart }) => {
-  const [selectedUom, setSelectedUom] = useState('Case');
-  const [quantity, setQuantity] = useState(1);
-
-  if (!selectedProduct) return null;
-
-  // Set default UOM based on product
-  useEffect(() => {
-    if (selectedProduct) {
-      if (selectedProduct.allow_case) {
-        setSelectedUom('Case');
-      } else if (selectedProduct.allow_each) {
-        setSelectedUom('Each');
-      }
-    }
-  }, [selectedProduct]);
-
-  const imgSrc =
-    selectedProduct.image_url ||
-    selectedProduct.image_path ||
-    'https://via.placeholder.com/600x400';
-
-  const uomOptions = [];
-  if (selectedProduct.allow_case) uomOptions.push('Case');
-  if (selectedProduct.allow_each) uomOptions.push('Each');
-
-  // --- Stock message logic (reads from Supabase field `qty_available`) ---
-  const qtyAvailable = Number(selectedProduct.qty_available ?? 0);
 
   let stockLine = '';
   let disclaimer = '';
@@ -682,6 +489,253 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
       </main>
     </div>
   );
+};
+
+/* ------------- Cart Page ------------- */
+const CartPage = ({
+  cart,
+  setCurrentPage,
+  updateCartQuantity,
+  removeFromCart,
+  showOrderConfirmation,
+  setShowOrderConfirmation,
+  submitOrder
+}) => {
+  // Local state for quantity editing to prevent focus loss.
+  const [editingQty, setEditingQty] = useState({});
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="grid grid-cols-2 gap-2">
+            <button onClick={() => setCurrentPage('catalog')}
+              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
+              <ChevronLeft size={20} /> Back to Catalog
+            </button>
+            <button onClick={() => setCurrentPage('order_history')}
+              className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2">
+              <History size={18} /> Order History
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 max-w-4xl">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Shopping Cart</h1>
+        {Object.keys(cart).length === 0 ? (
+          <div className="text-center py-12 bg-white rounded-lg shadow">
+            <ShoppingCart size={64} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500">Your cart is empty. Start shopping!</p>
+          </div>
+        ) : (
+          <>
+            <div className="bg-white rounded-lg shadow-lg overflow-hidden mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-teal-600 text-white">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Item Code</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Description</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Brand</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">UOM</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">Qty</th>
+                      <th className="px-4 py-3"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200">
+                    {Object.entries(cart).map(([key, item]) => {
+                      const displayValue = editingQty[key] !== undefined ? editingQty[key] : String(item.quantity);
+
+                      return (
+                        <tr key={key}>
+                          <td className="px-4 py-3 text-sm font-medium">{item.item_code}</td>
+                          <td className="px-4 py-3 text-sm">{item.description}</td>
+                          <td className="px-4 py-3 text-sm">{item.brand || '—'}</td>
+                          <td className="px-4 py-3 text-sm">{item.uom}</td>
+                          <td className="px-4 py-3">
+                            <input
+                              type="text"
+                              inputMode="numeric"
+                              pattern="[0-9]*"
+                              value={displayValue}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                setEditingQty(prev => ({ ...prev, [key]: v }));
+                              }}
+                              onBlur={() => {
+                                const v = editingQty[key];
+                                const n = v ? parseInt(v, 10) : item.quantity;
+                                const finalQty = (!Number.isFinite(n) || n < 1) ? 1 : n;
+                                updateCartQuantity(key, finalQty);
+                                setEditingQty(prev => {
+                                  const next = { ...prev };
+                                  delete next[key];
+                                  return next;
+                                });
+                              }}
+                              className="w-20 px-2 py-1 border border-gray-300 rounded text-sm text-center"
+                            />
+                          </td>
+                          <td className="px-4 py-3">
+                            <button onClick={() => removeFromCart(key)} className="text-red-600 hover:text-red-800">
+                              <Trash2 size={18} />
+                            </button>
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <button onClick={() => setShowOrderConfirmation(true)}
+              className="w-full bg-green-600 text-white py-4 rounded-lg font-semibold text-lg hover:bg-green-700 flex items-center justify-center gap-2">
+              <Package size={24} /> Send Order
+            </button>
+
+            {showOrderConfirmation && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-lg shadow-2xl p-6 max-w-md w-full">
+                  <h3 className="text-xl font-bold text-gray-800 mb-4">⚠️ Confirm Order</h3>
+                  <p className="text-gray-600 mb-6">Are you sure you want to submit this order?</p>
+                  <div className="flex gap-3">
+                    <button onClick={submitOrder} className="flex-1 bg-green-600 text-white py-3 rounded-lg font-semibold hover:bg-green-700">✅ Yes, Submit</button>
+                    <button onClick={() => setShowOrderConfirmation(false)} className="flex-1 bg-gray-300 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-400">❌ Cancel</button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </main>
+    </div>
+  );
+};
+
+/* ------------- Order History Page (Customer) ------------- */
+const OrderHistoryPage = ({ orders, setCurrentPage, cart }) => {
+  // reuse the `orders` state already loaded
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const toggleExpand = (id) => {
+    const next = new Set(expanded);
+    next.has(id) ? next.delete(id) : next.add(id);
+    setExpanded(next);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
+        <div className="container mx-auto px-4 py-4">
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => setCurrentPage('catalog')}
+              className="bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2"
+            >
+              <ChevronLeft size={20} /> Back to Catalog
+            </button>
+            <button
+              onClick={() => setCurrentPage('cart')}
+              className="bg-white text-teal-700 px-4 py-2 rounded-lg hover:bg-teal-50 border border-teal-200 flex items-center justify-center gap-2"
+            >
+              <ShoppingCart size={18} /> Cart ({Object.keys(cart).length})
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <main className="container mx-auto px-4 py-6 max-w-4xl">
+        <h1 className="text-3xl font-bold text-gray-800 mb-6">Order History</h1>
+
+        {orders.length === 0 ? (
+          <div className="bg-white rounded-lg shadow p-8 text-center">
+            <Package size={64} className="mx-auto text-gray-300 mb-4" />
+            <p className="text-gray-500">No orders yet.</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {orders.map(o => {
+              const isOpen = expanded.has(o.order_id);
+              const itemCount = (o.items || []).length;
+
+              return (
+                <div key={o.order_id} className="bg-white rounded-lg shadow-lg p-6">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <p>
+                          <span className="text-sm text-gray-600">Order</span><br />
+                          <span className="font-semibold text-gray-800">{displayOrderId(o)}</span>
+                        </p>
+                        <p>
+                          <span className="text-sm text-gray-600">Placed</span><br />
+                          <span className="font-semibold text-gray-800">{o.timestamp}</span>
+                        </p>
+                        <p>
+                          <span className="text-sm text-gray-600">Customer</span><br />
+                          <span className="font-semibold text-gray-800">{o.customer_name || '—'}</span>
+                        </p>
+                        <p>
+                          <span className="text-sm text-gray-600">Company</span><br />
+                          <span className="font-semibold text-gray-800">{o.company_name || '—'}</span>
+                        </p>
+                        <p>
+                          <span className="text-sm text-gray-600">Email</span><br />
+                          <span className="font-semibold text-gray-800">{o.email || '—'}</span>
+                        </p>
+                        <p>
+                          <span className="text-sm text-gray-600">Total Items</span><br />
+                          <span className="font-semibold text-gray-800">{itemCount}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => toggleExpand(o.order_id)}
+                      className="text-sm px-3 py-2 rounded bg-gray-100 hover:bg-gray-200"
+                    >
+                      {isOpen ? 'Hide items' : `Show items (${itemCount})`}
+                    </button>
+                  </div>
+
+                  {isOpen && (
+                    <div className="mt-4">
+                      <div className="bg-gray-50 rounded-lg p-4 overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="border-b border-gray-300">
+                            <tr>
+                              <th className="text-left py-2">Item Code</th>
+                              <th className="text-left py-2">Description</th>
+                              <th className="text-left py-2">Brand</th>
+                              <th className="text-left py-2">UOM</th>
+                              <th className="text-right py-2">Qty</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(o.items || []).map((it, idx) => (
+                              <tr key={idx} className="border-b border-gray-200">
+                                <td className="py-2">{it.item_code}</td>
+                                <td className="py-2">{it.description || '—'}</td>
+                                <td className="py-2">{it.brand || '—'}</td>
+                                <td className="py-2">{it.uom}</td>
+                                <td className="py-2 text-right">{it.quantity}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            </div>
+          )}
+        </main>
+    </div>
+  );
 };
 
 /* ------------- Order History Page (Customer) ------------- */
