@@ -298,134 +298,112 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
-const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart }) => {
-  const [selectedUom, setSelectedUom] = useState('Case');
-  const [quantity, setQuantity] = useState(1);
-  if (!selectedProduct) return null;
+const AVAILABLE_THRESHOLD = 5; // >5 cs = "Available"
 
-  // Set default UOM based on product
-  useEffect(() => {
-    if (selectedProduct) {
-      if (selectedProduct.allow_case) {
-        setSelectedUom('Case');
-      } else if (selectedProduct.allow_each) {
-        setSelectedUom('Each');
-      }
-    }
-  }, [selectedProduct]);
+const ProductDetail = ({ product, onBack, onAddToCart }) => {
+  const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/800x600';
+  const qtyAvailable = Number.isFinite(product.qty_available) ? Number(product.qty_available) : 0;
 
-  const imgSrc = selectedProduct.image_url || selectedProduct.image_path || 'https://via.placeholder.com/600x400';
-  const uomOptions = [];
-  if (selectedProduct.allow_case) uomOptions.push('Case');
-  if (selectedProduct.allow_each) uomOptions.push('Each');
+  const uomOptions = product.uom_options || [product.uom || 'EACH'];
+  const [uom, setUom] = React.useState(uomOptions[0]);
+  const [qty, setQty] = React.useState(1);
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-teal-600 text-white shadow-lg sticky top-0 z-10">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex gap-2">
-            <button onClick={() => setCurrentPage('catalog')}
-              className="flex-1 bg-teal-700 px-4 py-2 rounded-lg hover:bg-teal-800 flex items-center justify-center gap-2">
-              <ChevronLeft size={20} /> Back to Catalog
-            </button>
-            <button onClick={() => setCurrentPage('cart')}
-              className="flex-1 bg-amber-500 px-4 py-2 rounded-lg hover:bg-amber-600 flex items-center justify-center gap-2">
-              <ShoppingCart size={20} /> Cart ({Object.keys(cart).length})
-            </button>
-          </div>
-        </div>
-      </header>
+  const isOutOfStock = qtyAvailable === 0;
+  const isLowStock = qtyAvailable > 0 && qtyAvailable <= AVAILABLE_THRESHOLD;
+  const isAvailable = qtyAvailable > AVAILABLE_THRESHOLD;
 
-      <main className="container mx-auto px-4 py-6 max-w-2xl">
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h1 className="text-2xl font-bold text-gray-800 mb-2">{selectedProduct.description}</h1>
-          <p className="text-gray-500 mb-4">{selectedProduct.item_code}</p>
-          <div className="h-56 bg-gray-100 rounded-lg flex items-center justify-center mb-6">
-            <img src={imgSrc} alt={selectedProduct.description} className="max-h-full max-w-full object-contain" />
-          </div>
+  const handleAdd = () => onAddToCart?.({ product, quantity: qty, uom });
 
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm text-gray-600">Category: <span className="font-medium text-gray-800">{selectedProduct.category || 'N/A'}</span></p>
-              {selectedProduct.brand && <p className="text-sm text-gray-600">Brand: <span className="font-medium text-gray-800">{selectedProduct.brand}</span></p>}
-            </div>
+  // optional: show "cs" explicitly; change to "ea" if your qty_available is EACH
+  const stockUnit = 'cs';
 
-            {uomOptions.length > 0 ? (
-              <>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Unit of Measure</label>
-                  <div className="flex gap-2">
-                    {uomOptions.map(uom => (
-                      <button key={uom} onClick={() => setSelectedUom(uom)}
-                        className={`flex-1 py-2 rounded-lg font-medium ${selectedUom === uom ? 'bg-teal-600 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>
-                        {uom}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+  return (
+    <div className="bg-white rounded-lg shadow-md overflow-hidden">
+      <div className="flex items-center gap-4 p-4 border-b">
+        <button onClick={onBack} className="text-sm text-gray-600 hover:text-gray-800">
+          &larr; Back to catalog
+        </button>
+      </div>
 
-                {/* --- Quantity picker with + / - and safe typing --- */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Quantity</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(q => Math.max(1, Number(q) - 1))}
-                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                      aria-label="Decrease quantity"
-                    >
-                      −
-                    </button>
+      <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-gray-100 rounded-lg h-80 flex items-center justify-center p-6">
+          <img src={imgSrc} alt={product.description} className="max-h-full max-w-full object-contain" />
+        </div>
 
-                    <input
-                      type="text"
-                      inputMode="numeric"
-                      pattern="[0-9]*"
-                      value={String(quantity)}
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (v === '') return setQuantity('');
-                        if (/^\d+$/.test(v)) {
-                          const n = parseInt(v, 10);
-                          setQuantity(Number.isFinite(n) ? Math.max(1, n) : 1);
-                        }
-                      }}
-                      onBlur={() => {
-                        const n = parseInt(quantity, 10);
-                        if (!Number.isFinite(n) || n < 1) setQuantity(1);
-                      }}
-                      className="w-20 text-center px-2 py-2 border border-gray-300 rounded"
-                    />
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900">{product.description}</h1>
+          <p className="text-sm text-gray-500 mt-1">{product.item_code}</p>
 
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(q => Math.max(1, Number(q) + 1))}
-                      className="px-3 py-2 rounded-lg bg-gray-200 hover:bg-gray-300"
-                      aria-label="Increase quantity"
-                    >
-                      +
-                  </button>
-                  </div>
-                  </div>
+          {/* Status + count chips */}
+          <div className="mt-4 flex items-center gap-2 text-sm">
+            {isAvailable && (
+              <span className="px-2 py-1 rounded bg-emerald-100 text-emerald-800">Available</span>
+            )}
+            {isLowStock && (
+              <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">Low stock</span>
+            )}
+            {isOutOfStock && (
+              <span className="px-2 py-1 rounded bg-red-100 text-red-800">Out of stock</span>
+            )}
+            <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
+              {qtyAvailable} {stockUnit}
+            </span>
+          </div>
 
-                <button onClick={() => {
-                    const n = parseInt(quantity, 10);
-                    const safeQty = Number.isFinite(n) && n > 0 ? n : 1;
-                    addToCart(selectedProduct, selectedUom, safeQty);
-                    setCurrentPage('catalog');
-                  }}
-                  className="w-full bg-teal-600 text-white py-3 rounded-lg font-semibold hover:bg-teal-700 flex items-center justify-center gap-2">
-                  <ShoppingCart size={20} /> Add to Cart
-                </button>
-              </>
-            ) : (
-              <p className="text-red-600 text-center">This product is not available for purchase.</p>
-            )}
-          </div>
-        </div>
-      </main>
-    </div>
-  );
+          {/* Info banners (only low or no stock) */}
+          {isLowStock && (
+            <div className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
+              Heads up: inventory is low. We can’t guarantee delivery if demand exceeds remaining stock.
+            </div>
+          )}
+          {isOutOfStock && (
+            <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
+              Currently showing as out of stock. You can still place the order; fulfillment isn’t guaranteed.
+            </div>
+          )}
+
+          {/* Controls */}
+          <div className="mt-6 space-y-4">
+            {uomOptions.length > 1 && (
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-700 w-24">Unit</label>
+                <select
+                  className="border rounded px-3 py-2 text-sm w-40"
+                  value={uom}
+                  onChange={(e) => setUom(e.target.value)}
+                >
+                  {uomOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                </select>
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-700 w-24">Quantity</label>
+              <input
+                type="number"
+                min={1}
+                step={1}
+                value={qty}
+                onChange={(e) => setQty(Math.max(1, Number(e.target.value || 1)))}
+                className="border rounded px-3 py-2 text-sm w-40"
+              />
+            </div>
+          </div>
+
+          <div className="mt-6">
+            <button
+              onClick={handleAdd}
+              className="w-full py-3 rounded-lg text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white"
+            >
+              Add to Cart
+            </button>
+            <p className="mt-2 text-xs text-gray-500">
+              Availability messages are informational. Orders may be partially fulfilled or backordered.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 /* ------------- Cart Page ------------- */
@@ -1176,7 +1154,7 @@ const AdminDashboard = ({ handleLogout, orders, products, setProducts }) => {
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
               <h3 className="text-lg font-semibold text-gray-800 mb-4">Upload Product Database (CSV)</h3>
               <p className="text-sm text-gray-600 mb-4">
-                Required columns: item_code, description, brand, category, allow_case, allow_each, image_url
+                Required columns: item_code, description, brand, category, allow_case, allow_each, image_url, qty_available
               </p>
               <label className="flex items-center justify-center gap-2 bg-teal-600 text-white py-3 px-6 rounded-lg cursor-pointer hover:bg-teal-700 transition-colors">
                 <Upload size={20} />
