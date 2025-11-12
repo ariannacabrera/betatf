@@ -298,31 +298,35 @@ const CatalogPage = ({
 );
 
 /* ------------- Product Detail Page ------------- */
-/* ------------- Product Detail (only low/no stock messages + Available >5) ------------- */
-const AVAILABLE_THRESHOLD = 5;
-
-const ProductDetail = ({ product, onBack, onAddToCart }) => {
+/* ------------- Product Detail ------------- */
+const ProductDetail = ({
+  product,
+  onBack,
+  onAddToCart, // function({ product, quantity, uom })
+}) => {
   const imgSrc = product.image_url || product.image_path || 'https://via.placeholder.com/800x600';
   const qtyAvailable = Number.isFinite(product.qty_available) ? Number(product.qty_available) : 0;
 
+  // If you support UOM switching (e.g., 'CASE'/'EACH'), wire it here:
   const uomOptions = product.uom_options || [product.uom || 'EACH'];
   const [uom, setUom] = React.useState(uomOptions[0]);
   const [qty, setQty] = React.useState(1);
 
   const isOutOfStock = qtyAvailable === 0;
-  const isLowStock = !isOutOfStock && qtyAvailable <= AVAILABLE_THRESHOLD;
+  const isLowStock = !isOutOfStock && qtyAvailable < 5;
+
+  const exceedsStock = qty > qtyAvailable;
+  const canAdd = !isOutOfStock && !exceedsStock && qty > 0;
 
   const handleAdd = () => {
-    // Informational only — never block
+    if (!canAdd) return;
     onAddToCart?.({ product, quantity: qty, uom });
   };
 
   return (
     <div className="bg-white rounded-lg shadow-md overflow-hidden">
       <div className="flex items-center gap-4 p-4 border-b">
-        <button onClick={onBack} className="text-sm text-gray-600 hover:text-gray-800">
-          &larr; Back to catalog
-        </button>
+        <button onClick={onBack} className="text-sm text-gray-600 hover:text-gray-800">&larr; Back to catalog</button>
       </div>
 
       <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -334,34 +338,21 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
           <h1 className="text-lg font-semibold text-gray-900">{product.description}</h1>
           <p className="text-sm text-gray-500 mt-1">{product.item_code}</p>
 
-          {/* Stock chips */}
-          <div className="mt-4 inline-flex items-center gap-2 text-sm">
-            <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
-              {isOutOfStock
-                ? 'Out of Stock'
-                : isLowStock
-                  ? `${qtyAvailable} available`
-                  : 'Available'}
-            </span>
-            {isLowStock && !isOutOfStock && (
-              <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">Low stock</span>
-            )}
+          <div className="mt-4">
+            <div className="inline-flex items-center gap-2 text-sm">
+              <span className="px-2 py-1 rounded bg-gray-100 text-gray-700">
+                {isOutOfStock ? 'Out of Stock' : `${qtyAvailable} available`}
+              </span>
+              {isLowStock && (
+                <span className="px-2 py-1 rounded bg-amber-100 text-amber-800">
+                  Low stock
+                </span>
+              )}
+            </div>
           </div>
 
-          {/* Informational banners (only low or no stock) */}
-          {isLowStock && !isOutOfStock && (
-            <div className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded p-3">
-              Heads up: inventory is low. We can’t guarantee delivery if demand exceeds remaining stock.
-            </div>
-          )}
-          {isOutOfStock && (
-            <div className="mt-3 text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
-              Currently showing as out of stock. You can still place the order; fulfillment is not guaranteed.
-            </div>
-          )}
-
-          {/* Controls */}
           <div className="mt-6 space-y-4">
+            {/* UOM selector (optional) */}
             {uomOptions.length > 1 && (
               <div className="flex items-center gap-2">
                 <label className="text-sm text-gray-700 w-24">Unit</label>
@@ -369,12 +360,14 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
                   className="border rounded px-3 py-2 text-sm w-40"
                   value={uom}
                   onChange={(e) => setUom(e.target.value)}
+                  disabled={isOutOfStock}
                 >
                   {uomOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                 </select>
               </div>
             )}
 
+            {/* Qty input with guardrail */}
             <div className="flex items-center gap-2">
               <label className="text-sm text-gray-700 w-24">Quantity</label>
               <input
@@ -382,22 +375,32 @@ const ProductDetail = ({ product, onBack, onAddToCart }) => {
                 min={1}
                 step={1}
                 value={qty}
-                onChange={(e) => setQty(Math.max(1, Number(e.target.value || 1)))}
+                onChange={(e) => {
+                  const v = Math.max(1, Number(e.target.value || 1));
+                  setQty(v);
+                }}
                 className="border rounded px-3 py-2 text-sm w-40"
+                disabled={isOutOfStock}
               />
             </div>
+
+            {/* Validation messages */}
+            {!isOutOfStock && exceedsStock && (
+              <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-3">
+                Only {qtyAvailable} left in stock. Please reduce the quantity.
+              </div>
+            )}
           </div>
 
           <div className="mt-6">
             <button
               onClick={handleAdd}
-              className="w-full py-3 rounded-lg text-sm font-medium bg-teal-600 hover:bg-teal-700 text-white"
+              disabled={!canAdd}
+              className={`w-full py-3 rounded-lg text-sm font-medium
+                ${canAdd ? 'bg-teal-600 hover:bg-teal-700 text-white' : 'bg-gray-300 text-gray-600 cursor-not-allowed'}`}
             >
-              Add to Cart
+              {isOutOfStock ? 'Out of Stock' : exceedsStock ? 'Not Enough Stock' : 'Add to Cart'}
             </button>
-            <p className="mt-2 text-xs text-gray-500">
-              Availability messages are informational. Orders may be partially fulfilled or backordered.
-            </p>
           </div>
         </div>
       </div>
