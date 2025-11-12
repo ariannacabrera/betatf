@@ -3,8 +3,8 @@ import { supabase } from './lib/supabase';
 import { ShoppingCart, Search, Filter, ChevronLeft, Trash2, Package, LogOut, Upload, History } from 'lucide-react';
 
 /* =========================
-   CSV helpers (no deps)
-   ========================= */
+   CSV helpers (no deps)
+   ======================== */
 function ordersToCSV(orders) {
   const rows = [];
   rows.push([
@@ -33,14 +33,13 @@ function ordersToCSV(orders) {
   });
 
   return rows.join('\n');
-  // csv() stays the same
-}
 
-  function csv(v) {
-    const s = String(v ?? '');
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
-    return s;
-  }
+  // keep csv() scoped here to avoid parser issues
+  function csv(v) {
+    const s = String(v ?? '');
+    if (/[",\n]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
 }
 
 function downloadTextFile(filename, text) {
@@ -129,7 +128,7 @@ const LoginPage = ({ tryCustomerLogin, handleAdminLogin }) => {
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-teal-600 mb-2">Tany Foods</h1>
           <p className="text-gray-600 text-sm">Products you long for™</p>
-          <p className="text-xs text-gray-400 mt-1">— Est. 2016 —</p>
+          <p className="text-xs text-gray-400 mt-1">- Est. 2016 -</p>
         </div>
         <h2 className="text-2xl font-semibold text-gray-800 mb-6">Welcome Back!</h2>
 
@@ -758,8 +757,8 @@ const AdminOrdersPanel = ({ orders }) => {
                     <input type="checkbox" className="mt-1" checked={selected.has(id)} onChange={() => toggleSelect(id)} />
                     <div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        <p><span className="text-sm text-gray-600">Order ID</span><br />
-                          <span className="font-semibold text-gray-800">{o.order_id}</span></p>
+                        <p><span className="text-sm text-gray-600">Order</span><br />
+                          <span className="font-semibold text-gray-800">{displayOrderId(o)}</span></p>
                         <p><span className="text-sm text-gray-600">Timestamp</span><br />
                           <span className="font-semibold text-gray-800">{o.timestamp}</span></p>
                         <p><span className="text-sm text-gray-600">Customer</span><br />
@@ -986,7 +985,7 @@ const AdminCustomersPanel = () => {
           onClick={addCustomer}
           disabled={adding}
           className="mt-4 bg-emerald-600 text-white px-4 py-2 rounded-lg hover:bg-emerald-700">
-          {adding ? 'Saving…' : 'Add / Update'}
+          {adding ? 'Saving...' : 'Add / Update'}
         </button>
       </div>
 
@@ -994,7 +993,7 @@ const AdminCustomersPanel = () => {
         <h3 className="text-lg font-semibold text-gray-800 mb-4">Authorized Customers</h3>
 
         {loading ? (
-          <p className="text-gray-500">Loading…</p>
+          <p className="text-gray-500">Loading...</p>
         ) : rows.length === 0 ? (
           <p className="text-gray-500">No customers yet.</p>
         ) : (
