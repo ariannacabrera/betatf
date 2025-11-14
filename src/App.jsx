@@ -1346,6 +1346,7 @@ const TanyFoodsApp = () => {
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const [showOrderConfirmation, setShowOrderConfirmation] = useState(false);
+  const [cartHydrated, setCartHydrated] = useState(false);
 
   // Fast lookup for product details (used to enrich optimistic order items)
   const productByCode = useMemo(
@@ -1426,7 +1427,7 @@ const TanyFoodsApp = () => {
 
   // --- Auto-save cart to Supabase whenever it changes (debounced) ---
   useEffect(() => {
-    if (!loggedIn || !userData?.id) return;
+    if (!loggedIn || !userData?.id || !cartHydrated) return;
   
     const t = setTimeout(() => {
       // saves even when the cart is empty (useful to clear server copy)
@@ -1434,51 +1435,43 @@ const TanyFoodsApp = () => {
     }, 400); // debounce ~400ms to avoid chatty writes
   
     return () => clearTimeout(t);
-  }, [cart, loggedIn, userData?.id]);
+  }, [cart, loggedIn, userData?.id, cartHydrated]);
 
 
   /* ------------- Auth ------------- */
   // email-only customer login against profiles
-  const tryCustomerLogin = async (rawEmail) => {
-    const e = (rawEmail || "").trim().toLowerCase();
-    if (!e) return alert("Enter your email");
+  const tryCustomerLogin = async (rawEmail) => {
+  const e = (rawEmail || "").trim().toLowerCase();
+  if (!e) return alert("Enter your email");
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, email, first_name, last_name, company_name, is_admin, is_active")
-      .eq("email", e)
-      .maybeSingle();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("id, email, first_name, last_name, company_name, is_admin, is_active")
+    .eq("email", e)
+    .maybeSingle();
 
-    if (error) {
-      console.error("Supabase error:", error);
-      return alert("Error checking access: " + (error.message || "unknown"));
-    }
-    if (!data || data.is_active === false) {
-      return alert("This email is not authorized.");
-    }
+  if (error) { console.error(error); return alert("Error checking access: " + error.message); }
+  if (!data || data.is_active === false) return alert("This email is not authorized.");
 
-    setLoggedIn(true);
-    setIsAdmin(Boolean(data.is_admin));
-    setUserData({
-      id: data.id,
-      email: data.email,
-      first_name: data.first_name || "",
-      last_name: data.last_name || "",
-      company_name: data.company_name || ""
-    });
+  // 1) Set auth state
+  setLoggedIn(true);
+  setIsAdmin(Boolean(data.is_admin));
+  setUserData({
+    id: data.id,
+    email: data.email,
+    first_name: data.first_name || "",
+    last_name: data.last_name || "",
+    company_name: data.company_name || ""
+  });
 
-    // NEW: load saved cart for this user
-    loadCartForUser(data.id).then(saved => {
-      // only set if it’s a plain object
-      setCart(saved && typeof saved === 'object' ? saved : {});
-    });
-    
-    // then choose page
-    setCurrentPage(Boolean(data.is_admin) ? 'admin' : 'catalog');
+  // 2) Load the saved draft (await!)
+  const saved = await loadCartForUser(data.id);
+  setCart(saved && typeof saved === 'object' ? saved : {});
+  setCartHydrated(true);           // <-- allow autosave now
 
-    // Set current page AFTER login is successful
-    setCurrentPage(Boolean(data.is_admin) ? 'admin' : 'catalog');
-  };
+  // 3) Go to page
+  setCurrentPage(Boolean(data.is_admin) ? 'admin' : 'catalog');
+};
 
   const handleAdminLogin = (username, password) => {
     if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
