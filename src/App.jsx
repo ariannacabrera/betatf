@@ -110,6 +110,43 @@ function displayOrderId(o) {
   return `#${String(o.order_id).slice(0, 8).toUpperCase()}`;
 }
 
+// ---- Cart persistence helpers (Supabase) ----
+const loadCartForUser = async (userId) => {
+  const { data, error } = await supabase
+    .from('carts')
+    .select('items')
+    .eq('user_id', userId)
+    .eq('status', 'draft')
+    .maybeSingle();
+  if (error) {
+    console.error('loadCartForUser:', error);
+    return {};
+  }
+  return (data?.items ?? {});
+};
+
+const persistCartForUser = async (userId, cartObj) => {
+  // upsert one draft cart per user
+  const payload = {
+    user_id: userId,
+    status: 'draft',
+    items: cartObj,
+    updated_at: new Date().toISOString()
+  };
+  const { error } = await supabase
+    .from('carts')
+    .upsert(payload, { onConflict: 'user_id' }); // uses the partial unique index
+  if (error) console.error('persistCartForUser:', error);
+};
+
+const clearDraftCartForUser = async (userId) => {
+  const { error } = await supabase
+    .from('carts')
+    .delete()
+    .eq('user_id', userId)
+    .eq('status', 'draft');
+  if (error) console.error('clearDraftCartForUser:', error);
+};
 
 /* ====================================================================
    PAGE & UI COMPONENTS (Moved outside the main app)
@@ -1386,6 +1423,20 @@ const TanyFoodsApp = () => {
     })();
   }, [loggedIn, isAdmin, userData?.id]);
 
+
+  // --- Auto-save cart to Supabase whenever it changes (debounced) ---
+  useEffect(() => {
+    if (!loggedIn || !userData?.id) return;
+  
+    const t = setTimeout(() => {
+      // saves even when the cart is empty (useful to clear server copy)
+      persistCartForUser(userData.id, cart);
+    }, 400); // debounce ~400ms to avoid chatty writes
+  
+    return () => clearTimeout(t);
+  }, [cart, loggedIn, userData?.id]);
+
+
   /* ------------- Auth ------------- */
   // email-only customer login against profiles
   const tryCustomerLogin = async (rawEmail) => {
@@ -1415,6 +1466,16 @@ const TanyFoodsApp = () => {
       last_name: data.last_name || "",
       company_name: data.company_name || ""
     });
+
+    // NEW: load saved cart for this user
+    loadCartForUser(data.id).then(saved => {
+      // only set if it’s a plain object
+      setCart(saved && typeof saved === 'object' ? saved : {});
+    });
+    
+    // then choose page
+    setCurrentPage(Boolean(data.is_admin) ? 'admin' : 'catalog');
+
     // Set current page AFTER login is successful
     setCurrentPage(Boolean(data.is_admin) ? 'admin' : 'catalog');
   };
@@ -1536,6 +1597,8 @@ const TanyFoodsApp = () => {
 
     setOrders(prev => [newOrderForUI, ...prev]);
     setCart({});
+    // 4) Clear the saved draft cart in Supabase
+    await clearDraftCartForUser(userData.id);
     setShowOrderConfirmation(false);
     alert(`✅ Order ${order_number} submitted!`);
     setCurrentPage('catalog');
