@@ -148,6 +148,120 @@ const clearDraftCartForUser = async (userId) => {
   if (error) console.error('clearDraftCartForUser:', error);
 };
 
+// --------- SAFER uploader -----------
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(l => l.trim().length);
+      if (lines.length < 2) {
+        showToast('CSV seems empty.');
+        return;
+      }
+
+      // Parse headers
+      const headers = splitCsvLine(lines[0]).map(h => h.trim());
+      const headerSet = new Set(headers);
+
+      // Check for missing headers
+      // (We filter out image_path if image_url exists to be lenient)
+      const missing = REQUIRED_HEADERS.filter(h => {
+         if (h === 'image_path' && headerSet.has('image_url')) return false; 
+         return !headerSet.has(h);
+      });
+      
+      const unknown = headers.filter(h => h && !ALLOWED.has(h));
+
+      if (missing.length) {
+        showToast(`⚠️ Missing required headers: ${missing.join(', ')}`);
+        return;
+      }
+      if (unknown.length) {
+        showToast(`ℹ️ Ignoring unknown headers: ${unknown.join(', ')}`);
+      }
+
+      // Build rows
+      const rows = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = splitCsvLine(lines[i]);
+        if (!cols.length) continue;
+        
+        const raw = {};
+        headers.forEach((h, j) => { raw[h] = cols[j] ?? ''; });
+
+        // Keep only allowed headers
+        const p = {};
+        for (const k in raw) if (ALLOWED.has(k)) p[k] = raw[k];
+
+        // Normalize strings
+        if (p.item_code) p.item_code = String(p.item_code).trim();
+        if (!p.item_code) continue; // skip row without item_code
+
+        // Handle image path vs url compatibility
+        if (p.image_url && !p.image_path) {
+            p.image_path = p.image_url;
+            delete p.image_url;
+        }
+
+        if (p.description) p.description = String(p.description).trim();
+        if (p.brand) p.brand = String(p.brand).trim();
+        if (p.category) p.category = String(p.category).trim();
+        if (p.image_path) p.image_path = String(p.image_path).trim();
+        if (p.case_label) p.case_label = String(p.case_label).trim();
+        if (p.product_details) p.product_details = String(p.product_details).trim();
+
+        // Booleans
+        if (p.allow_case !== undefined) p.allow_case = toBool(p.allow_case);
+        if (p.allow_each !== undefined) p.allow_each = toBool(p.allow_each);
+
+        // Integers
+        if (p.qty_available !== undefined) {
+          const n = toIntOrNull(p.qty_available);
+          if (n === null) delete p.qty_available; else p.qty_available = n;
+        }
+
+        rows.push(p);
+      }
+
+      if (rows.length === 0) {
+        showToast('No valid rows to import.');
+        return;
+      }
+
+      // Upsert to Supabase
+      const { error } = await supabase
+        .from('products')
+        .upsert(rows, { onConflict: 'item_code' });
+
+      if (error) {
+        console.error(error);
+        showToast('❌ Upload error: ' + (error.message || 'Unknown'));
+        return;
+      }
+
+      // Refresh table
+      const { data: refreshed, error: refErr } = await supabase
+        .from('products')
+        .select('*')
+        .order('description', { ascending: true });
+
+      if (!refErr) {
+        setProducts(refreshed || []);
+      }
+
+      showToast(`✅ Uploaded ${rows.length} products successfully.`);
+      
+      // Clear the file input so the same file can be selected again if needed
+      e.target.value = ''; 
+
+    } catch (err) {
+      console.error(err);
+      showToast('❌ Failed to read CSV. Please check format.');
+    }
+  };
+
 /* ====================================================================
    PAGE & UI COMPONENTS (Moved outside the main app)
    ==================================================================== */
