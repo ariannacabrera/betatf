@@ -140,7 +140,7 @@ const REQUIRED_HEADERS = [
   'allow_case', 'allow_each', 'image_path' // Note: Your CSV header must be 'image_path', not 'image_url'
 ];
 const OPTIONAL_HEADERS = [
-  'case_label', 'product_details', 'qty_available', 'image_url' // Added image_url here just in case
+  'case_label', 'product_details', 'qty_available', 'image_url', 'image_case', 'image_each' // Added image_url here just in case
 ];
 const ALLOWED = new Set([...REQUIRED_HEADERS, ...OPTIONAL_HEADERS]);
 
@@ -367,11 +367,18 @@ const ProductDetailPage = ({ selectedProduct, setCurrentPage, cart, addToCart })
     }
   }, [selectedProduct]);
 
-  const imgSrc =
+  let imgSrc =
     selectedProduct.image_url ||
     selectedProduct.image_path ||
     'https://via.placeholder.com/600x400';
 
+  // 2) If a UOM is selected and we have a specific image for it, override
+  if (selectedUom === 'Case' && selectedProduct.image_case) {
+    imgSrc = selectedProduct.image_case;
+  } else if (selectedUom === 'Each' && selectedProduct.image_each) {
+    imgSrc = selectedProduct.image_each;
+  }
+    
   const uomOptions = [];
   if (selectedProduct.allow_case) uomOptions.push('Case');
   if (selectedProduct.allow_each) uomOptions.push('Each');
@@ -1405,6 +1412,36 @@ const AdminProductsPanel = ({ products, setProducts }) => {
                     />
                   </td>
                   <td className="px-4 py-3">
+                    <div className="flex flex-col gap-1">
+                      {/* Default image (uses existing image_url / image_path behavior) */}
+                      <input
+                        type="text"
+                        placeholder="Default image"
+                        value={p.image_url || p.image_path || ''}
+                        onChange={e => updateField(p.item_code, 'image_url', e.target.value)}
+                        className="w-40 border border-gray-300 rounded-lg p-1 text-xs"
+                      />
+                      {/* Optional CASE image */}
+                      <input
+                        type="text"
+                        placeholder="Case image (optional)"
+                        value={p.image_case || ''}
+                        onChange={e => updateField(p.item_code, 'image_case', e.target.value)}
+                        className="w-40 border border-gray-300 rounded-lg p-1 text-xs"
+                      />
+                      {/* Optional EACH image */}
+                      <input
+                        type="text"
+                        placeholder="Each image (optional)"
+                        value={p.image_each || ''}
+                        onChange={e => updateField(p.item_code, 'image_each', e.target.value)}
+                        className="w-40 border border-gray-300 rounded-lg p-1 text-xs"
+                      />
+                    </div>
+                  </td>
+
+
+                    
                     <input
                       type="text"
                       value={p.image_url || p.image_path || ''}
