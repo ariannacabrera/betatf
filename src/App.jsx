@@ -1449,7 +1449,6 @@ const AdminProductsPanel = ({ products, setProducts }) => {
                   </td>
                 </tr>
               ))}
-</tbody>
             
 /* ------------- Admin Customers Panel ------------- */
 const AdminCustomersPanel = () => {
