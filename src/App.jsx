@@ -1439,24 +1439,6 @@ const AdminProductsPanel = ({ products, setProducts }) => {
                       />
                     </div>
                   </td>
-
-
-                    
-                    <input
-                      type="text"
-                      value={p.image_url || p.image_path || ''}
-                      onChange={e => updateField(p.item_code, 'image_url', e.target.value)}
-                      className="w-32 border border-gray-300 rounded-lg p-1 text-sm"
-                    />
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <button
-                      onClick={() => deleteProduct(p.item_code, p.description)}
-                      className="text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </td>
                 </tr>
               ))}
             </tbody>
