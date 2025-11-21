@@ -1439,16 +1439,18 @@ const AdminProductsPanel = ({ products, setProducts }) => {
                       />
                     </div>
                   </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      onClick={() => deleteProduct(p.item_code, p.description)}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  </td>
                 </tr>
               ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  );
-};
-
+</tbody>
+            
 /* ------------- Admin Customers Panel ------------- */
 const AdminCustomersPanel = () => {
   const [rows, setRows] = useState([]);
