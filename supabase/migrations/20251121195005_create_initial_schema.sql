@@ -121,24 +121,6 @@ CREATE TABLE IF NOT EXISTS carts (
   updated_at timestamptz DEFAULT now()
 );
 
--- 1. Drop policies on profiles
-DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
-DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
-
--- 2. Drop policies on products
-DROP POLICY IF EXISTS "Anyone can view products" ON products;
-
--- 3. Drop policies on orders
-DROP POLICY IF EXISTS "Users can view own orders" ON orders;
-DROP POLICY IF EXISTS "Users can create orders" ON orders;
-
--- 4. Drop policies on order_items
-DROP POLICY IF EXISTS "Users can view order items for own orders" ON order_items;
-
--- 5. Drop policies on carts
-DROP POLICY IF EXISTS "Users can manage own cart" ON carts;
-DROP POLICY IF EXISTS "Users can update own cart" ON carts;
-DROP POLICY IF EXISTS "Users can insert own cart" ON carts;
 
 -- 6. Disable RLS on all tables
 ALTER TABLE profiles    DISABLE ROW LEVEL SECURITY;
