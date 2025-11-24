@@ -1,0 +1,11 @@
+/*
+  # Disable Row Level Security
+
+  Disables RLS on all tables to allow unrestricted access.
+*/
+
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+ALTER TABLE orders DISABLE ROW LEVEL SECURITY;
+ALTER TABLE order_items DISABLE ROW LEVEL SECURITY;
+ALTER TABLE carts DISABLE ROW LEVEL SECURITY;
